@@ -1,0 +1,9 @@
+.input-label {
+    padding: 0 0 15px 0;
+}
+.input-label .label-checkbox {
+    display: inline-block;
+    margin-left: 7px;
+    margin-top: 3px;
+    font-weight: normal;
+}

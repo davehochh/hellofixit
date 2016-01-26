@@ -1,0 +1,1 @@
+<div class="item"><img alt="<?php print $fields['title']->content;?>" src="<?php print $fields['field_clients_image']->content;?>"/></div>

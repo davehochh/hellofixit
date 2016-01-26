@@ -1,0 +1,8 @@
+name = MD Pricing Table
+description = MD Pricing Table
+core = 7.x
+version = 7.x-1.25
+package = MegaDrupal
+
+dependencies[] = media
+dependencies[] = icon

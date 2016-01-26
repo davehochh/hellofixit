@@ -1,0 +1,4 @@
+name = springspray
+description = Provide custom block for springspray
+core = 7.x
+package = Custom

@@ -1,0 +1,16 @@
+
+span.error {
+    background: url('images/unchecked.gif') no-repeat;
+    padding-left: 16px;
+    padding-top: 1px;
+    margin-left: .3em;
+    display: inline;
+    width: 16px;
+    height: 16px;
+}
+label.valid {
+    background: url('images/checked.gif') no-repeat;
+    display: block;
+    width: 16px;
+    height: 16px;
+}

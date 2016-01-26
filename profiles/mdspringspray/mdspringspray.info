@@ -1,0 +1,10 @@
+name = MD Springspray
+description = Select this profile to install demo profile for MD Springspray theme.
+core = 7.x
+exclusive = 1
+dependencies[] = node
+dependencies[] = contact
+files[] = mdspringspray.profile
+
+version = "7.32"
+project = "drupal"

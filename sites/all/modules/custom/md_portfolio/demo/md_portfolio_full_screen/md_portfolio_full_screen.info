@@ -1,0 +1,14 @@
+name = MD Portfolio Full Screen
+description = MD Portfolio Full Screen
+core = 7.x
+package = MegaDrupal
+version = 7.x-1.0
+project = md_portfolio_full_screen
+dependencies[] = md_portfolio_core_demo
+dependencies[] = md_portfolio
+dependencies[] = views
+features[ctools][] = views:views_default:3.0
+features[features_api][] = api:2
+features[views_view][] = md_portfolio_full_screen
+features_exclude[dependencies][ctools] = ctools
+project path = sites/all/modules/features

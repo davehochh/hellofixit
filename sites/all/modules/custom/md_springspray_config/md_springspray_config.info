@@ -1,0 +1,4 @@
+name = SpringSpray Custom Config
+description = Mega Drupal SpringSpray Custom Config
+core = 7.x
+package = Megadrupal

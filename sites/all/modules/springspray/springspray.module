@@ -1,0 +1,37 @@
+<?php
+
+/**
+ * Implement hook_block_info().
+ */
+function springspray_block_info() {
+  $blocks['author'] = array(
+    'info' => t('Author'),
+  );
+  $blocks['tabs'] = array(
+    'info' => t('Author'),
+  );
+  return $blocks;
+}
+
+/**
+ * Implement hook_block_view().
+ */
+function springspray_block_view($delta = '') {
+  $block = array();
+
+  switch ($delta) {
+    case 'author':
+      $block['subject'] = '';
+      $block['content'] = '';
+      $node = menu_get_object();
+      if ($node) {
+        $account = user_load($node->uid);
+        $block['content'] = array(
+          '#theme' => 'author',
+          '#content' => user_view($account),
+        );
+      } 
+      break;
+  }
+  return $block;
+}

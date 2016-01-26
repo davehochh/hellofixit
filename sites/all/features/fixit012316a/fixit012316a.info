@@ -1,0 +1,6 @@
+name = fixit012316a
+core = 7.x
+package = Features
+version = 7.x-1.0
+features[features_api][] = api:2
+project path = sites/all/features
