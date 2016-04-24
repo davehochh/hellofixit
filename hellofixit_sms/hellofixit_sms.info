@@ -1,0 +1,6 @@
+name = hellofixit sms
+package = hellofixit
+description = find a contractor
+core = 7.x
+dependencies[] = twilio
+module_load_include('inc', 'hellofixit_sms', 'hellofixit_sms.rules');

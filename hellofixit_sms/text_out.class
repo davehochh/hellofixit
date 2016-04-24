@@ -1,0 +1,81 @@
+<?php
+
+class text_out{
+
+	public function __construct(){
+	}
+	
+	
+	
+	
+	public function main($job_ref,$customer_ref,$fixit_ref,$sms,$mms,$text_type_ref,$cell_formatted){
+		$textData = $this->validate_data_for_new_text($job_ref,$customer_ref,$fixit_ref,$sms,$mms,$text_type_ref,$cell_formatted);
+	
+		if($textData['validated'] == 1) $tnode = $this->create_text_node($textData);
+	
+	return $tnode;
+	}
+	
+	
+	
+	private function create_text_node($textData){
+		$tnode = new stdClass();
+		$tnode->type = 'text_out';
+		$tnode->title = 'text out';
+		$tnode->status = 1;
+		$tnode->field_job['und'][0]['target_id'] = $textData['job_ref'];
+		$tnode->field_customer_ref['und'][0]['target_id'] = $textData['customer_ref'];
+		$tnode->field_fixit_ref['und'][0]['target_id'] = $textData['fixit_ref'];
+		$tnode->field_sms['und'][0]['value'] = $textData['sms'];
+		$tnode->field_mms['und'][0]['value'] = $textData['mms'];
+		$tnode->field_text_type['und'][0]['tid'] = $textData['text_type_ref'];
+		$tnode->field_cell_phone['und'][0]['value'] = preg_replace('/[^0-9]/','',$textData['cell_formatted']);
+		$tnode->uid = 1;
+		node_save($tnode);
+	return $tnode;
+	}
+	
+	
+	
+	
+	private function validate_data_for_new_text($job_ref,$customer_ref,$fixit_ref,$sms,$mms,$text_type_ref,$cell_formatted){
+		$textData = array(
+						'job_ref' => NULL,
+						'customer_ref' => NULL,
+						'fixit_ref' => NULL,
+						'sms' => NULL,
+						'mms' => NULL,
+						'text_type_ref' => NULL,
+						'cell_formatted' => NULL,
+						'validated' => 0);
+		
+		$textData['job_ref'] = $job_ref;
+		$textData['customer_ref'] = $customer_ref;
+		$textData['fixit_ref'] = $fixit_ref;
+		$textData['sms'] = $sms;
+		$textData['mms'] = $mms;
+		$textData['text_type_ref'] = $text_type_ref;
+		$textData['cell_formatted'] = $cell_formatted;
+
+		if($job_ref == NULL){
+			watchdog('hellofixit','text out job_ref null', WATCHDOG_NOTICE);
+			return $textData;
+		}elseif($customer_ref == NULL){
+			watchdog('hellofixit','text out customer_ref null', WATCHDOG_NOTICE);
+			$textData['customer_ref'] = 0;
+		}elseif($fixit_ref == NULL){
+			//watchdog('hellofixit','text out fixit_ref null', WATCHDOG_NOTICE);
+			$textData['fixit_ref'] = 0;
+		}elseif($text_type_ref == NULL){
+			watchdog('hellofixit','text out text_type_ref null', WATCHDOG_NOTICE);
+			return $textData;			
+		}elseif($cell_formatted == NULL){
+			watchdog('hellofixit','text out cell_formatted null', WATCHDOG_NOTICE);
+			return $textData;
+		}
+				
+		$textData['validated'] = 1;	
+	
+	return $textData;
+	}	
+}

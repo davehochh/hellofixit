@@ -1,0 +1,401 @@
+<?php
+
+class text_in{
+	
+	public function __construct(){
+	}
+	
+	
+	
+	
+	public function main(array $newText, array $fTerms, array $fSettings){
+		//reformat the cell number so we can search in the database	
+		$newText['cell_formatted'] = $this->parse_cell($newText['cell']);
+		
+		$textInDetails = $this->what_is_this_text_in($newText,$fTerms,$fSettings);
+
+		$this->react_to_text_in($textInDetails,$newText,$fTerms,$fSettings);
+			
+	return $textInDetails;
+	}
+	
+	
+	
+	
+	private function what_is_this_text_in(array $newText, array $fTerms, array $fSettings){
+	// This method decides what a text is, so that we can decide how to deal with it
+	
+	//new array that we will return later
+	$textInDetails = array();
+	
+	//list of things we want to find out about the new text (and the level)
+	//level 1 details are independant
+	//level 2 details are dependant on level 1
+	$detailsItems = array(
+	'spam' => 1,
+	'take_job' => 1,
+	'feedback' => 1,
+	'existing_person' => 1,
+	'add_to_job' => 1,
+	'contains_zip' => 1,
+	'contains_contractor' => 1,
+	'update_zip' => 2,
+	'new_fixit' => 2,
+	'new_customer' => 2,
+	'new_job' => 2,
+	'dbData' => 0);
+
+	foreach($detailsItems as $key => $level){
+		$textInDetails[$key] = array(
+						'level' => $level,
+						'value' => 0);
+	}
+			
+	//Get level 1 (independant) details about the new text
+	foreach($textInDetails as $keyDetail => $iDetail){
+		if(!$iDetail['level'] == 1) continue;
+		$textInDetails = $this->checkText($keyDetail,$textInDetails,$newText,$fTerms,$fSettings);
+	}
+	
+	//Get level 2 (dependant) details about the new text
+	foreach($textInDetails as $keyDetail => $iDetail){
+		if(!$iDetail['level'] == 2) continue;
+		$textInDetails = $this->checkText($keyDetail,$textInDetails,$newText,$fTerms,$fSettings);
+	}
+	
+	return $textInDetails;
+	}
+	
+	
+	
+	
+	private function checkText($keyDetail, array $textInDetails, array $newText, array $fTerms, array $fSettings){
+	//check if spam
+	if($keyDetail == 'spam'){
+		//sql query for person type = spammer with matching cell number
+		$sql = 'select cp.entity_id as spammer_nid
+		from {field_data_field_cell_phone cp}
+		join {field_data_field_person_type pt} on pt.entity_id = cp.entity_id
+		where cp.field_cell_phone_value = :cell_formatted
+		and pt.field_person_type_tid = :person_type';
+
+		$args = array(	':cell_formatted' => $newText['cell_formatted'],
+						':person_type' => $fTerms['person_types']['spammer']);
+		$result = db_query($sql,$args)->fetchAssoc();
+		if(!isset($result) or $result == NULL) return $textInDetails;
+		$textInDetails['spam']['value'] = 1;
+		$textInDetails['dbData']['spammer_nid'] = $result['spammer_nid'];
+	
+	return $textInDetails;
+	}
+	
+	//check if it is a text from a Fixit who wants to take a job
+	if($keyDetail == 'take_job'){
+
+		//query for texts sent in the last 10m (or time interval from settings) to person type = fixits where the cell phone matches
+		$sql = "	select n.nid as text_nid,
+					n.created as text_time,
+					j.field_job_target_id as job_nid,
+					cp.entity_id as fixit_nid,
+					s.field_status_tid as job_status
+		from 		{field_data_field_cell_phone cp}
+		join 		{field_data_field_person_type pt} on cp.entity_id = pt.entity_id
+		join 		{field_data_field_fixit_ref fr} on fr.field_fixit_ref_target_id = cp.entity_id
+		join 		{field_data_field_job j} on j.entity_id = fr.entity_id
+		join 		{node n} on n.nid = fr.entity_id
+		join		{field_data_field_status s} on s.entity_id = j.field_job_target_id
+		where 		cp.field_cell_phone_value = :cell_formatted
+		and 		pt.field_person_type_tid = :person_type
+		and 		fr.bundle = 'text_out'
+		and 		n.created > :tenMin
+		order by	n.created desc";
+		
+		$tenMin = time() - $fSettings['job_relay_time']['value'];
+		$args = array(':cell_formatted' => $newText['cell_formatted'],
+						':person_type' => $fTerms['person_types']['fixit'], 
+						':tenMin' => $tenMin);
+		$result = db_query($sql,$args)->fetchAssoc();
+		if(!isset($result) or $result == NULL) return $textInDetails;
+
+		if(!(preg_match('/fixit/',$newText['sms'],$matches))) return $textInDetails;
+
+		$textInDetails['take_job']['value'] = 1;
+		$textInDetails['dbData']['take_job_nid'] = $result['job_nid'];
+		$textInDetails['dbData']['fixit_nid'] = $result['fixit_nid'];
+
+	return $textInDetails;
+	}
+	
+	if($keyDetail == 'feedback'){
+		//query for text node where the recipient is a customer with matching cell number
+		//and text out type = request feedback, in the last 2 hours
+		$sql = "select cr.entity_id as text_out_nid,
+						tt.field_text_type_tid as text_type,
+						cr.field_customer_ref_target_id as customer_nid,
+						fr.field_fixit_ref_target_id as fixit_nid
+		from 			field_data_field_cell_phone cp
+		join 			field_data_field_customer_ref cr on cr.field_customer_ref_target_id = cp.entity_id
+		join 			field_data_field_text_type tt on tt.entity_id = cr.entity_id
+		join 			field_data_field_fixit_ref fr on fr.entity_id = cr.entity_id
+		join 			node n on n.nid = cr.entity_id
+		where 			cp.field_cell_phone_value = :cell_formatted
+		and 			cr.bundle = 'text_out'
+		and 			tt.field_text_type_tid = :request_feedback
+		and 			n.created > :twoHours";
+		
+		$twoHours = time() - (2*60*60);
+		$args = array(	':cell_formatted' => $newText['cell_formatted'], 
+						':request_feedback' => $fTerms['text_out_types']['request feedback'],
+						':twoHours' => $twoHours);
+		$result = db_query($sql,$args)->fetchAssoc();
+		if(!isset($result) or $result == NULL) return $textInDetails;
+		$textInDetails['feedback']['value'] = 1;
+		$textInDetails['dbData']['feedback_customer_nid'] = $result['customer_nid'];
+		$textInDetails['dbData']['feedback_fixit_nid'] = $result['fixit_nid'];
+		
+	return $textInDetails;
+	}
+	
+	if($keyDetail == 'existing_person'){
+		//query to find out if text is from an existing person
+		$sql = "select cp.entity_id as person_nid
+		from field_data_field_cell_phone cp
+		where cp.field_cell_phone_value = :cell_formatted
+		order by cp.entity_id desc";
+
+		$args = array(':cell_formatted' => $newText['cell_formatted']);
+		$result = db_query($sql,$args)->fetchAssoc();
+		
+		if(!isset($result) or $result == NULL) return $textInDetails;
+		$textInDetails['existing_person']['value'] = 1;
+		$textInDetails['dbData']['existing_person_nid'] = $result['person_nid'];
+		
+	return $textInDetails;
+	}
+
+	if($keyDetail == 'add_to_job'){
+		//if a job was created for same person in the last minute we probably 
+		//want to add this new info to that job instead of making a new job
+		
+		//query to see if job exists for this cell number within last minute
+		$sql = "select cr.entity_id as job_nid,
+				cr.field_customer_ref_target_id as customer_nid,
+				n.created as when_created
+				from field_data_field_cell_phone cp
+				join field_data_field_customer_ref cr on cr.field_customer_ref_target_id = cp.entity_id
+				join node n on n.nid = cr.entity_id
+				where cp.field_cell_phone_value = :cell_formatted
+				and cr.bundle = 'job'
+				and n.created > :oneMin";
+
+		$oneMin = time() - 60;
+		$args = array(	':cell_formatted' => $newText['cell_formatted'],
+						':oneMin' => $oneMin);
+		$result = db_query($sql,$args)->fetchAssoc();
+		if(!isset($result) or $result == NULL) return $textInDetails;
+		$textInDetails['add_to_job']['value'] = 1;
+		$textInDetails['dbData']['add_to_job_nid'] = $result['job_nid'];
+		
+	return $textInDetails;
+	}
+	
+	if($keyDetail == 'contains_zip'){
+		//check if it contains a five digit number
+		if(!(preg_match('/[0-9]{5}/',$newText['sms'],$matches))) return $textInDetails;
+		$textInDetails['contains_zip']['value'] = 1;
+		$textInDetails['dbData']['contains_zip'] = $matches[0];
+		
+	return $textInDetails;
+	}
+	
+	if($keyDetail == 'contains_contractor'){
+		//check if it contains a the string contractor
+		if(!(preg_match('/contractor/',$newText['sms'],$matches))) return $textInDetails;
+		$textInDetails['contains_contractor']['value'] = 1;
+	
+	return $textInDetails;
+	}
+	
+	if($keyDetail == 'update_zip'){
+		if($textInDetails['contains_zip']['value'] == 0) return $textInDetails;
+		if($textInDetails['existing_person']['value'] == 0) return $textInDetails;
+		
+		$textInDetails['update_zip']['value'] = 1;
+	return $textInDetails;
+	}
+	
+	if($keyDetail == 'new_fixit'){
+		//check if this has already been marked as from an existing person
+		if($textInDetails['existing_person'] == 1) return $textInDetails;
+		
+		//if the message doesn't contain the string contractor then it's not a new fixit
+		if($textInDetails['contains_contractor']['value'] == 0) return $textInDetails;
+		
+		$textInDetails['new_fixit']['value'] = 1;
+		
+	return $textInDetails;
+	}
+
+	if($keyDetail == 'new_customer'){
+		//check if this has already been marked as from an existing person
+		if($textInDetails['existing_person']['value'] == 1) return $textInDetails;
+		
+		//return 0 if the text contains the string 'contractor'
+		if($textInDetails['contains_contractor']['value'] == 1) return $textInDetails;
+		
+		$textInDetails['new_customer']['value'] = 1;
+		
+		return $textInDetails;
+	}
+		
+	if($keyDetail == 'new_job'){
+		//if not spam
+		if($textInDetails['spam']['value'] == 1) return $textInDetails;
+		
+		//if not feedback
+		if($textInDetails['feedback']['value'] == 1) return $textInDetails;
+		
+		//if not take_job
+		if($textInDetails['take_job']['value'] == 1) return $textInDetails;
+		
+		//if not add to job
+		if($textInDetails['add_to_job']['value'] == 1) return $textInDetails;
+		
+		//if doesn't contain string contractor
+		if($textInDetails['contains_contractor']['value'] == 1) return $textInDetails;
+		
+		//if not update zip
+		if($textInDetails['update_zip']['value'] == 1) return $textInDetails;
+		
+		$textInDetails['new_job']['value'] = 1;
+		
+		return $textInDetails;
+	}
+
+
+	}
+	
+
+
+
+	
+
+
+	
+
+	private function parse_cell($cell){
+		//format the cell number like (111) 222-3333 because of the idiots who wrote the phone field module
+		$cell_formatted = 0;
+		
+		if(is_numeric($cell) && strlen($cell) == 10){
+			$area = substr($cell,0,3);
+			$exch = substr($cell,3,3);
+			$four = substr($cell,6,4);
+			$cell_formatted = '(' . $area . ') ' . $exch . '-' . $four;
+		}
+	return $cell_formatted;
+	}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	private function react_to_text_in(array $textInDetails, array $newText, array $fTerms, array $fSettings){
+	
+		if($textInDetails['spam']['value'] == 1){
+			if(isset($textInDetails['dbData']['spammer_nid'])){
+				$j1 = new job();
+				$j1->main($textInDetails['dbData']['spammer_nid'],
+							'',
+							$newText['sms'],
+							$newText['mms'],
+							$fTerms['job_statuses']['denied']);				
+			}
+		}
+		
+		if($textInDetails['take_job']['value'] == 1){
+			if(isset($textInDetails['dbData']['take_job_nid'])){
+				$j1 = new job();
+				$j1->set_job_status($textInDetails['dbData']['take_job_nid'],
+									$fTerms['job_statuses']['taken-not notified customer']);
+									
+				$j1->set_job_fixit($textInDetails['dbData']['take_job_nid'],
+									$textInDetails['dbData']['fixit_nid']);
+			}
+		}
+		
+		if($textInDetails['feedback']['value'] == 1){
+			if(isset($textInDetails['dbData']['feedback_customer_nid']) &&
+				isset($textInDetails['dbData']['feedback_fixit_nid'])){
+					$f1 = new feedback();
+					$f1->new_feedback_node($textInDetails['dbData']['feedback_customer_nid'],
+											$textInDetails['dbData']['feedback_fixit_nid'],
+											$newText['sms']);
+				}
+		}
+		
+		if($textInDetails['add_to_job']['value'] == 1){
+			$j1 = new job();
+			$j1->set_job_sms_mms($textInDetails['dbData']['add_to_job_nid'],
+									$newText['sms'],
+									$newText['mms']);						
+		}
+		
+		if($textInDetails['update_zip']['value'] == 1){
+			$p1 = new person();
+			$p1->set_person_zip($textInDetails['dbData']['existing_person_nid'],
+								$textInDetails['dbData']['contains_zip']);
+		}
+		
+		if($textInDetails['new_fixit']['value'] == 1){
+			if($textInDetails['contains_zip']['value'] == 1){
+				$zip = $textInDetails['dbData']['contains_zip'];
+			}else{
+				$zip = '';
+			}
+			
+			$f1 = new person();
+			$fixitNid = $f1->new_person_node($newText['cell_formatted'],
+							$fTerms['person_types']['fixit'],
+							'',
+							'',
+							$zip)->nid;
+		}
+		
+		if($textInDetails['new_customer']['value'] == 1){
+			if($textInDetails['contains_zip']['value'] == 1){
+				$zip = $textInDetails['dbData']['contains_zip'];
+			}else{
+				$zip = '';
+			}
+
+			$j1 = new person();
+			$j1->new_person_node($newText['cell_formatted'],
+								$fTerms['person_types']['customer'],
+								'',
+								'',
+								$zip);
+		}
+
+		if($textInDetails['new_job']['value'] == 1){
+			$sql = "select		cp.entity_id as customer_nid
+					from 		{field_data_field_cell_phone cp}
+					where 		cp.field_cell_phone_value = :cell_formatted";
+		
+			$args = array(':cell_formatted' => $newText['cell_formatted']);
+			$result = db_query($sql,$args)->fetchAssoc();
+			if(!isset($result) or $result == NULL) return;
+
+			$j1 = new job();
+			$j1->main($result['customer_nid'],
+						'',
+						$newText['sms'],
+						$newText['mms'],
+						$fTerms['job_statuses']['needs approval']);
+		}
+	}
+}

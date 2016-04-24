@@ -1,0 +1,78 @@
+<?php
+
+class fixit_terms{
+	
+	
+	public function main(){
+		$fTerms = $this->get_fixit_terms_from_db();
+	
+	return $fTerms;
+	}
+
+	private function get_fixit_terms_from_db(){
+	$exist = 0;
+	$job_statuses = array(
+						'needs approval' => 0,
+						'approved' => 0,
+						'denied' => 0,
+						'taken-not notified customer' => 0,
+						'taken-notified customer' => 0,
+						'taken-details sent to fixit' => 0,
+						'feedback requested' => 0);
+						
+	$text_out_types = array(
+						'notify customer job is taken' => 0,
+						'relay to fixit' => 0,
+						'request approval' => 0,
+						'request feedback' => 0,
+						'send details to fixit' => 0);
+	$person_types = array(
+						'customer' => 0,
+						'fixit' => 0,
+						'spammer' => 0);
+
+	$fTerms = array(
+						'exist' => 0,
+						'job_statuses' => $job_statuses,
+						'text_out_types' => $text_out_types,
+						'person_types' => $person_types);
+
+
+	$sql =	"select		tv.vid,
+						tv.name as vocab,
+						td.tid as term_ref,
+						td.name as term
+			from		taxonomy_vocabulary tv
+			join		taxonomy_term_data td on td.vid = tv.vid
+			where		tv.name = 'job_statuses'
+			or			tv.name = 'person_types'
+			or			tv.name = 'text_out_types'";
+
+	
+	$results = db_query($sql);
+
+	//Copy the taxonomy term target IDs to overwrite the zeros
+	foreach($results as $r){
+		$fTerms[$r->vocab][$r->term] = $r->term_ref;
+	}
+	
+	
+	//Check to make sure there are no zeros left
+	$fTerms = $this->check_for_zeros($fTerms);
+	return $fTerms;					
+	}
+
+
+
+
+	private function check_for_zeros($fTerms){
+		foreach($fTerms as $i){
+			if($i == 'exist') continue;
+			foreach($i as $j){
+				if($j === 0) return $fTerms;
+			}
+		}
+	$fTerms['exist'] = 1;
+	return $fTerms;
+	}
+}

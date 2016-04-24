@@ -1,0 +1,137 @@
+<?php
+
+class job{
+
+	public function __construct(){
+	}
+	
+	
+	
+	
+	public function main($customer_ref,$fixit_ref,$sms,$mms,$job_status_ref){
+		$jobData = $this->validate_data_for_new_job($customer_ref,$fixit_ref,$sms,$mms,$job_status_ref);
+		if($jobData['validated'] == 1) $jnode = $this->create_job_node($jobData);
+	return $jnode;
+	}
+	
+	
+	
+	
+	private function validate_data_for_new_job($customer_ref,$fixit_ref,$sms,$mms,$job_status_ref){
+		$jobData = array(
+						'customer_ref' => NULL,
+						'fixit_ref' => NULL,
+						'sms' => NULL,
+						'mms' => NULL,
+						'job_status_ref' => NULL,
+						'validated' => 0);
+		
+		$jobData['customer_ref'] = $customer_ref;
+		$jobData['fixit_ref'] = $fixit_ref;
+		$jobData['sms'] = $sms;
+		$jobData['mms'] = $mms;
+		$jobData['job_status_ref'] = $job_status_ref;
+
+		if($customer_ref == NULL){
+			watchdog('hellofixit','new job customer_ref null', WATCHDOG_NOTICE);
+			return $jobData;
+		}
+		
+		if($fixit_ref == NULL){
+			$jobData['fixit_ref'] = 0;
+		}
+			
+		if($sms == NULL){
+			watchdog('hellofixit','new job sms null', WATCHDOG_NOTICE);
+			return $jobData;
+		}
+		
+		if($mms == NULL){
+			watchdog('hellofixit','new job mms null', WATCHDOG_NOTICE);
+		}
+		
+		if($job_status_ref == NULL){
+			watchdog('hellofixit','new job status ref null', WATCHDOG_NOTICE);
+			return $jobData;
+		}
+		
+		$jobData['validated'] = 1;	
+	
+	return $jobData;
+	}
+	
+	
+	
+	
+	private function create_job_node($jobData){
+		$jnode = new stdClass();
+		$jnode->type = 'job';
+		$jnode->title = 'job';
+		$jnode->status = 1;
+		$jnode->field_customer_ref['und'][0]['target_id'] = $jobData['customer_ref'];
+		$jnode->field_fixit_ref['und'][0]['target_id'] = $jobData['fixit_ref'];
+		$jnode->field_sms['und'][0]['value'] = $jobData['sms'];
+		$jnode->field_mms['und'][0]['value'] = $jobData['mms'];
+		$jnode->field_status['und'][0]['tid'] = $jobData['job_status_ref'];
+		$jnode->uid = 1;
+		node_save($jnode);
+	return $jnode;
+	}
+	
+	
+	
+	
+	//@todo - get rid of this?
+	public function get_customer_nid($job_nid){
+		$jnode = node_load($job_nid);
+		if($jnode == FALSE) return FALSE;
+		$customer_nid = $jnode->field_customer_ref['und'][0]['target_id'];
+		return $customer_nid;
+	}
+	
+	
+	
+	
+	public function get_job_info($job_nid){
+		$jnode = node_load($job_nid);
+		if($jnode == FALSE) return FALSE;
+		
+		$job_info = array();
+		$job_info['customer_nid'] = $jnode->field_customer_ref['und'][0]['target_id'];
+		$job_info['sms'] = $jnode->field_sms['und'][0]['value'];
+		$job_info['mms'] = $jnode->field_mms['und'][0]['value'];
+	return $job_info;
+	}
+	
+	
+	
+	
+	public function set_job_status($job_nid,$status_ref){
+		$jnode = node_load($job_nid);
+		if($jnode == FALSE) return;
+
+		$jnode->field_status['und'][0]['tid'] = $status_ref;
+		node_save($jnode);
+	}
+	
+	
+	
+	
+	public function set_job_sms_mms($job_nid,$new_sms,$new_mms){
+		$jnode = node_load($job_nid);
+		if($jnode == FALSE) return;
+
+		if(!$new_sms == NULL) $jnode->field_sms['und'][0]['value'] = $new_sms;
+		if(!$new_mms == NULL) $jnode->field_mms['und'][0]['value'] = $new_mms;
+		node_save($jnode);
+	}
+	
+	
+	
+	
+	public function set_job_fixit($job_nid,$fixit_ref){
+		$jnode = node_load($job_nid);
+		$jnode->field_fixit_ref['und'][0]['target_id'] = $fixit_ref;
+		node_save($jnode);
+	}
+}

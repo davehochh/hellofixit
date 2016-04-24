@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the fixit content types feature.
+ */
+
+include_once 'hellofixit_setup.features.inc';

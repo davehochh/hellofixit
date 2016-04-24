@@ -1,0 +1,6 @@
+name = hellofixit
+description = contains modules for hellofixit
+core = 7.x
+package = hellofixit
+dependencies[] = hellofixit_sms
+dependencies[] = hellofixit_setup

@@ -1,0 +1,319 @@
+<?php
+
+class jobs_relay{
+	
+	public function main(array $fTerms, array $fSettings){
+			$jobs = $this->get_jobs_to_relay($fSettings);
+			$this->relay_jobs($jobs,$fTerms,$fSettings);			
+	}
+	
+	
+	
+	
+	private function duplicate_text($cellFormatted, $jobNid, $textOutType){
+
+		//unformat cellFormatted
+		$cell = preg_replace('/[^0-9]/','',$cellFormatted);
+		
+		$sql = "select		*
+				from		field_data_field_cell_phone cp
+				join		field_data_field_text_type tt on tt.entity_id = cp.entity_id
+				join		field_data_field_job j on j.entity_id = cp.entity_id
+				where		cp.field_cell_phone_value = :cell
+				and			cp.bundle = 'text_out'
+				and			j.field_job_target_id = :job_nid
+				and			tt.field_text_type_tid = :text_type";
+				
+				
+		$args = array(':cell' => $cell,
+						':job_nid' => $jobNid,
+						':text_type' => $textOutType);
+		$result = db_query($sql,$args)->fetchAssoc();
+		
+		if(!$result == NULL) return 1;
+		
+	return 0;
+	}
+
+
+
+	private function get_jobs_to_relay($fSettings){
+		$sql = "select		s.entity_id as job_nid,
+							s.field_status_tid as job_status,
+							cr.field_customer_ref_target_id as customer_nid,
+							fr.field_fixit_ref_target_id as fixit_nid,
+							j.entity_id as text_nid,
+							n.created as last_text,
+							fs.field_sms_value as sms,
+							fm.field_mms_value as mms,
+							cpc.field_cell_phone_value as customer_cell,
+							cpf.field_cell_phone_value as fixit_cell,
+							fn.field_first_name_value as first_name,
+							ln.field_last_name_value as last_name
+				from		{field_data_field_status s}
+				left join	{field_data_field_customer_ref cr} on cr.entity_id = s.entity_id
+				left join	{field_data_field_fixit_ref fr} on fr.entity_id = s.entity_id
+				left join	{field_data_field_job j} on j.field_job_target_id = s.entity_id
+				left join	{node n} on n.nid = j.entity_id
+				left join	{field_data_field_sms fs} on fs.entity_id = s.entity_id
+				left join	{field_data_field_mms fm} on fm.entity_id = s.entity_id
+				left join	{field_data_field_cell_phone cpc} on cpc.entity_id = cr.field_customer_ref_target_id
+				left join	{field_data_field_cell_phone cpf} on cpf.entity_id = fr.field_fixit_ref_target_id
+				left join	{field_data_field_first_name fn} on fn.entity_id = cr.field_customer_ref_target_id
+				left join	{field_data_field_last_name ln} on ln.entity_id = cr.field_customer_ref_target_id
+				where		s.bundle = 'job'
+				order by	s.entity_id DESC,
+							n.created DESC";
+		
+		$results = db_query($sql);
+
+		$jobs = array();
+		$job_nid = 0;
+		foreach($results as $r){
+			//if it's not the first row with this job id, skip to next row
+			if($job_nid == $r->job_nid) continue;
+			
+			$job_nid = $r->job_nid;
+
+			//if it has a text within the time interval, don't include it in the array
+			if((time() - $r->last_text) < $fSettings['job_relay_time']['value']) continue;
+			
+			$jobs[] = $r;
+		}
+	return $jobs;
+	}
+	
+	
+	
+	
+	private function relay_jobs($jobs,$fTerms,$fSettings){
+		//if the time is during quiet hours, don't proceed
+		date_default_timezone_set('America/Los_Angeles');
+		if(!(time() > strtotime($fSettings['relay_start_time']['value']) && time() < strtotime($fSettings['relay_stop_time']['value']))){
+			return;
+		}
+		
+		
+		
+		
+		foreach($jobs as $j){
+
+			//validate job data
+			if($j->job_nid == NULL) $j->job_nid = 0;
+			if($j->customer_nid == NULL) $j->customer_nid = 0;
+			if($j->fixit_nid == NULL) $j->fixit_nid = 0;
+			if($j->sms == NULL) continue;
+			if($j->mms == NULL) $j->mms = ''; //@todo put real validation here later
+			
+			
+			
+			
+		switch($j->job_status){
+			
+
+
+
+
+		//job status = needs approval
+		case $fTerms['job_statuses']['needs approval']:
+			//if we have already sent a text to the admin for this job, don't send another one
+			if(!$j->last_text == NULL) break;
+
+			//arguments for text out: 
+			//$job_ref,
+			//$customer_ref,
+			//$fixit_ref,
+			//$sms,
+			//$mms,
+			//$text_type_ref,
+			//$cell_formatted
+			$t1 = new text_out();
+			$t1->main($j->job_nid,
+						$j->customer_nid,
+						0,
+						$fSettings['sms_job_needs_approval']['value'] . $fSettings['url']['value'] . '/jobadmin/new/' . $j->job_nid,
+						$j->mms,
+						$fTerms['text_out_types']['request approval'],
+						$fSettings['admin_cell_formatted']['value']);
+		break;
+			
+
+
+
+
+		//job status = approved
+		case $fTerms['job_statuses']['approved']:
+
+			$fixit = $this->get_fixit($fTerms,$fSettings);
+
+			if(!isset($fixit)) break;
+			
+			//if we have ever sent a text to this cell number about this job, 
+			//with this status, don't send another one
+			if($this->duplicate_text($fixit->cell_formatted,
+									$j->job_nid,
+									$fTerms['text_out_types']['relay to fixit']) == 1) break;
+			
+			//arguments for text out: 
+			//$job_ref,
+			//$customer_ref,
+			//$fixit_ref,
+			//$sms,
+			//$mms,
+			//$text_type_ref,
+			//$cell_formatted
+			$t1 = new text_out();
+			$t1->main($j->job_nid,
+						0,
+						$fixit->fixit_nid,
+						$fSettings['sms_job_relay_to_fixit']['value'] . $j->sms,
+						$j->mms,
+						$fTerms['text_out_types']['relay to fixit'],
+						$fixit->cell_formatted);
+
+		break;
+			
+
+
+
+
+		//job status = denied
+		case $fTerms['job_statuses']['denied']:
+			// do nothing
+		break;
+
+		
+		
+		
+		
+		//job status taken-not notified customer
+		case $fTerms['job_statuses']['taken-not notified customer']:
+			//arguments for text out: 
+			//$job_ref,
+			//$customer_ref,
+			//$fixit_ref,
+			//$sms,
+			//$mms,
+			//$text_type_ref,
+			//$cell_formatted
+			$t1 = new text_out();
+			$t1->main($j->job_nid,
+						$j->customer_nid,
+						$j->fixit_nid,
+						$fSettings['sms_job_taken_notify_customer']['value'] . ' ' . $j->fixit_cell,
+						$j->mms,
+						$fTerms['text_out_types']['notify customer job is taken'],
+						$j->customer_cell);
+
+			$j1 = new job();
+			$j1->set_job_status($j->job_nid,
+								$fTerms['job_statuses']['taken-notified customer']);
+		break;
+		
+		
+		
+		
+		//job status = taken-notified customer
+		case $fTerms['job_statuses']['taken-notified customer']:
+			$t1 = new text_out();
+			$t1->main($j->job_nid,
+						$j->customer_nid,
+						$j->fixit_nid,
+						$fSettings['sms_job_taken_details_to_fixit']['value'] . ' ' . $j->customer_cell,
+						$j->mms,
+						$fTerms['text_out_types']['send details to fixit'],
+						$j->fixit_cell);
+
+			//set job status to taken-details sent to fixit
+			$j1 = new job();
+			$j1->set_job_status($j->job_nid,
+								$fTerms['job_statuses']['taken-details sent to fixit']);
+		break;
+
+		
+		
+		
+		
+		//job status = taken-details sent to fixit
+		case $fTerms['job_statuses']['taken-details sent to fixit']:
+			//make sure the last text related to this job was between 24-48 hours ago
+			$timeSinceLastText = time() - $j->last_text/(60*60);
+			if($timeSinceLastText < $fSettings['delay_request_feedback_min']) continue;
+			if($timeSinceLastText > $fSettings['delay_request_feedback_max']) continue;
+
+			$t1 = new text_out();
+			$t1->main($j->job_nid,
+						$j->customer_nid,
+						0,
+						$fSettings['sms_job_request_feedback']['value'],
+						$j->mms,
+						$fTerms['text_out_types']['request feedback'],
+						$j->customer_cell);
+
+			//set job status to feedback requested
+			$j1 = new job();
+			$j1->set_job_status($j->job_nid,
+								$fTerms['job_statuses']['feedback requested']);
+		break;
+		
+		
+		
+		
+		
+		//job status = feedback requested
+		case $fTerms['job_statuses']['feedback requested']:
+			//do nothing
+		break;		
+	}		
+	
+	}
+	}
+	
+	
+	
+	
+	private function get_fixit($fTerms,$fSettings){
+		$sql = "select			n.nid as fixit_nid,
+								pt.field_person_type_tid as person_type,
+								cp.field_cell_phone_value as cell_formatted,
+								fr.entity_id as text_nid,
+								nt.created as text_time
+				from			node n
+				join			field_data_field_person_type pt on pt.entity_id = n.nid
+				join			field_data_field_cell_phone cp on cp.entity_id = n.nid
+				left join		field_data_field_fixit_ref fr on fr.field_fixit_ref_target_id = n.nid
+				left join		node nt on nt.nid = fr.entity_id
+				where			n.type = 'person'
+				and				pt.field_person_type_tid = :fixit_tid
+				and				cp.field_cell_phone_value is not null
+				and				cp.field_cell_phone_value != '() -'
+				order by		n.nid desc,
+								nt.created desc";
+
+		$person_type = $fTerms['person_types']['fixit'];
+		$args = array(':fixit_tid' => $person_type);
+		$results = db_query($sql,$args);
+
+		//copy all the fixits to an array and exclude duplicates and ones with a text message in last time interval
+		$fixits = array();		
+		$fixit_nid = 0;
+		foreach($results as $r){
+			
+			if($fixit_nid == $r->fixit_nid) continue;
+			
+			$fixit_nid = $r->fixit_nid;
+
+			//if it has a text within the last 10m, don't include it in the array
+			if((time() - $r->text_time) < $fSettings['job_relay_time']['value']) continue;
+			
+			$fixits[] = $r;
+		}
+
+		//pick on fixit at random
+		if(count($fixits) > 0) $fixit = $fixits[rand(0,count($fixits)-1)];
+		
+	return $fixit;
+	}
+
+
+}

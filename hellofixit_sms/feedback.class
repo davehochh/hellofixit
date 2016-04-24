@@ -1,0 +1,20 @@
+<?php
+
+class feedback{
+
+  public function main(){
+	  
+  }
+
+	public function new_feedback_node($customer_nid,$fixit_nid,$sms){
+		$fnode = new stdClass();
+		$fnode->type = 'feedback';
+		$fnode->title = 'feedback';
+		$fnode->status = 1;
+		$fnode->field_customer_ref['und'][0]['target_id'] = $customer_nid;
+		$fnode->field_fixit_ref['und'][0]['target_id'] = $fixit_nid;
+		$fnode->field_feedback['und'][0]['value'] = $sms;
+		$fnode->uid = 1;
+		node_save($fnode);
+	}  
+}

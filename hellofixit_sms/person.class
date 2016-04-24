@@ -1,0 +1,60 @@
+<?php
+
+class person{
+
+	public function new_person_node($cell_formatted,$person_type,$first_name,$last_name,$zip){
+		$pnode = new stdClass();
+		$pnode->type = 'person';
+		$pnode->title = 'person';
+		$pnode->status = 1;
+		$pnode->field_person_type['und'][0]['tid'] = $person_type;
+		$pnode->field_cell_phone['und'][0]['value'] = $cell_formatted;
+		$pnode->field_first_name['und'][0]['value'] = $first_name;
+		$pnode->field_last_name['und'][0]['value'] = $last_name;
+		$pnode->field_address['und'][0]['postal_code'] = $zip;
+		$pnode->uid = 1;
+		node_save($pnode);
+	return $pnode;
+	}
+	
+	
+	
+
+	public function set_person_type($person_nid,$person_type){
+		$pnode = node_load($person_nid);
+		if($pnode == FALSE) return;
+		$pnode->field_person_type['und'][0]['tid'] = $person_type;
+		node_save($pnode);
+	}
+	
+	
+	
+	
+	public function set_person_zip($person_nid,$zip){
+		$pnode = node_load($person_nid);
+		if($pnode == FALSE) return;
+		$pnode->field_address['und'][0]['postal_code'] = $zip;
+		node_save($pnode);
+	}
+	  
+
+	
+	
+	//@todo - this is future build, for when fixits can pay to be top of list
+	private function set_contractor_status(){
+	}
+	
+	
+	
+	
+	public function get_person_info($person_nid){
+		$pnode = node_load($person_nid);
+		if($pnode == FALSE) return FALSE;
+		
+		$person_info = array();
+		$person_info['zip'] = $pnode->field_address['und'][0]['postal_code'];
+		
+	return $person_info;
+	}
+
+}
