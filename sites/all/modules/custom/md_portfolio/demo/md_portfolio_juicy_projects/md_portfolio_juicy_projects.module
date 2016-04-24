@@ -1,7 +1,0 @@
-<?php
-/**
- * @file
- * Code for the MD Portfolio Juicy Projects feature.
- */
-
-include_once 'md_portfolio_juicy_projects.features.inc';
