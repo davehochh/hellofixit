@@ -204,54 +204,52 @@ If using nano text editor, save with Ctl-O and exit with Ctl-X.
 FUTURE DEVELOPMENT ROADMAP
 --------------------------
 
-test with not truncating to 160 characters
-test with a real cell phone for fixit and customer
-when a customer sends just a photo, it seems to not create a job (when sms is null)
-make a setting for the time interval that a fixit has to respond
-make a setting for add to job interval
-test sending a job from iphone with sms and mms
-confirmation that we got your job message
-button to reset to default settings
-setting for don't send same job to same fixit more than x times
-kill switch for relay and text in
-add nid to watchdog messages
-put real data validation on mms in jobs relay
+- Quality control and testing
+	Test with not truncating to 160 characters
+	Test with a real cell phone for fixit and customer (not Google voice)
+	
+- Possible bugs
+	Zip codes don't display in UI when populated programmatically
+	When a customer sends just a photo, it seems to not create a job (when sms is null)
+	
+- Settings
+	Kill switch for relay and text in
+	Button to reset to default settings
+	Make a setting for the time interval that a fixit has to respond
+	Make a setting for add to job interval
+	Setting for don't send same job to same fixit more than x times
+	String to check for for new customer and new fixit (hardcoded currently)
+	Time interval where it won't create new job for same customer
 
-- Send message to admin asking to approve job
+- Jobs relay
+	** Calculate distance between zip codes to figure out what Fixits to relay jobs to
+	Get rid of current jobadmin page and replace with a view
+	Confirmation that we got your job message
+	Put real data validation on mms in jobs relay
+	If job is from customer we don't have zip code then ask for zip code
 
-- Text in - Create new customer person via text "hellofixit" and five digit integer
-- Text in - Create new fixit person via text "contractor" and five digit integer
-- Text in - Check for message with "help" string and respond with link to readme?
-- Text in - if created a job from the same number within 1 min add it to the last job created
-- Text in - add to job - see if sms or mms is blank on existing job
-- Text in - If job is from customer we don't have zip code then ask for zip code
+- Logs
+	Add nid to watchdog messages
 
-- Relay - calculate distance between zip codes to figure out what Fixits to relay jobs to
-- Relay - Need a way for admin to approve jobs: approved, denied, spam, need customer address
-- Relay - Texts to admin need a url to approve jobs because they are going to be sent every 10m in batches
+- Text in
+	Check for message with "help" string and respond with link to readme?
 
-- Tests - jobs relay
+- Tests
+	- More tests for jobs relay
 
-
-- Cron callback password in settings
-- Add job ref field to feedback node
-- Relay - Only relay jobs to Fixits with same first 3 digits in zip code
-- Relay - send confirmation that we got the customer's job
-- Relay - send confirmation when new job is approved
-- Check for admin cell phone in hellofixit_cron
-- If no admin cell phone, display error or something
-- Views for admin to see usage data
-- Settings should have time interval where it won't create new job for same customer
-- Installation message
-- Setup ability for Fixits to pay to be on top of the list
-- Get rid of else ifs in person and text out validation
-- Phone number validation
-- Review the default SMS messages to make sure they make sense
-- Get rid of body field in feedback node
-- Add data validation to new person node so that it won't allow duplicate cell numbers
-- Add data validation to new feedback node
-- Double check that public variables are no longer used - e.g. cell_formatted
-
+- Misc
+	Add job ref field to feedback node
+	Check for admin cell phone in hellofixit_cron
+	If no admin cell phone, display error or something
+	Views for admin to see usage data
+	Installation message
+	Setup ability for Fixits to pay to be on top of the list
+	Phone number validation
+	Review the default SMS messages to make sure they make sense
+	Get rid of body field in feedback node
+	Add data validation to new person node so that it won't allow duplicate cell numbers
+	Add data validation to new feedback node
+	
 
 MAINTAINERS
 -----------
