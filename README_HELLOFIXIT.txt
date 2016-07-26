@@ -3,6 +3,8 @@ CONTENTS
 * Version
 * Introduction
 * User stories
+* Text-in filters
+* Jobs relay filters
 * Program flow when a new message is received
 * Program flow for jobs relay
 * Requirements
@@ -17,12 +19,16 @@ CONTENTS
 * Functions, classes, and methods
 
 
-
 VERSION
 -------
 1.1 - Update March 28, 2016
 1.4 - Update April 13, 2016
 1.5	- Update April 17, 2016
+1.6	- Update July 25, 2016
+	- Check distance between customer and Fixit by zip code
+	- Make incoming text message logic more expandable by making it easy to add filters
+	- Make jobs relay logic more flexible by making it easier to add filters
+
 
 INTRODUCTION
 ------------
@@ -44,6 +50,39 @@ about the customer (name, address, cell phone)
 
 * As an admin, I get notified of new messages coming in and I mark them as 
 spam, job, new person, etc.
+
+* As an admin, I want the system to automatically recognize what kind of message
+just came in, and react accordingly. To do this, I can set filters.
+
+
+TEXT-IN FILTERS
+---------------
+The module figures out what an incoming text message says and what to do with by 
+by using filters. These are defined in the hellofixit.settings file under function 
+text_in_settings(). Each one has a corresponding check method and react method,
+located in the text_in class. Each setting (or filter) has three elements:
+
+Level
+Level 1 means you can decide if it is true by making an observation. If you
+can decide whether "contains zip" is true by checking to see if the message contains
+a 5-digit numerical string, for example, then it is a Level 1. On the other hand,
+if you can only infer whether something is true, then it is a Level 2 filter. For
+example, you can only determine if a message is a new job by eliminating it as spam,
+take_job, and feedback; this means it is a Level 2 filter.
+
+Active
+Whether the module will run the check and react methods associated with the filter.
+
+Value
+Set to zero by default. The check method sets the value to one if it determines that
+the filter is true. The react method will run only if the value is set to one.
+
+
+JOBS RELAY FILTERS
+------------------
+Very similar to text-in filters, these examine each job in the database to decide 
+what to do with it next. For example, make sure the customer has a zip code, and 
+request one if not. By default, there are no level 2 filters.
 
 
 PROGRAM FLOW WHEN A NEW MESSAGE IS RECEIVED
@@ -76,10 +115,10 @@ PROGRAM FLOW FOR JOBS RELAY
 ---------------------------
 Loop through all jobs in the database and perform actions based on job status
 
-- Needs approval
+- needs_approval
 Send message to admin asking for approval
 
-* - Needs customer zip code
+- Needs customer zip code
 If we don't have a zip for the customer who sent the job, ask for one
 
 - Approved
@@ -95,12 +134,10 @@ Send message to customer that their job was accepted and give them the Fixit's c
 Send message to the Fixit with customer's cell number
 
 - Taken (sent details to Fixit)
-Request feedback between 24-48 hours later
+request_feedback between 24-48 hours later
 
-- Feedback requested
+- Feedback_requested
 Do nothing
-
-* Not yet built
 
 
 REQUIREMENTS
@@ -149,7 +186,6 @@ https://www.drupal.org/project/uuid
 UUID Features (enabled)
 https://www.drupal.org/project/uuid_features
 
-
 Note that for Twilio you will need to setup an account first with a phone number 
 for SMS and MMS service. Twilio also requires its library to be installed and 
 it needs to be configured with API keys. You will also need shell access on your 
@@ -176,6 +212,19 @@ INSTALLATION
 2. Copy all the required contrib modules to /sites/all/modules/contrib
 3. Activate the HF module (this will automatically take care of the submodules and dependancies)
 4. Place the Twilio library from /hellofixit/lib in /sites/all/libraries
+5. Modfiy Twilio module
+
+
+MODIFY TWILIO MODULE
+--------------------
+Twilio API module, version 7.x-1.11
+File: twilio.module
+Function: twilio_receive_message()
+Remove "&& !empty($_REQUEST['Body'])" from line 291 (the first line of the function).
+
+This will prevent pictures from being ignored if they arrive separately from text
+messages. As long as they arrive within the number of seconds specified in 
+add_to_job, Hellofixit will merge them together in the job.
 
 
 CONFIGURATION
@@ -203,16 +252,30 @@ If using nano text editor, save with Ctl-O and exit with Ctl-X.
 
 FUTURE DEVELOPMENT ROADMAP
 --------------------------
+- Admin
+	Add view to show fixits without zip code
+	Add bulk operation to text fixits requesting zip code		
+
+- Messages
+	Add message to settings to tell customer no fixits available
+	Add message to settings to tell customer no fixits responded
+
+- Jobs relay
+	If no fixits available, change job status and notify customer
+	Put real data validation on mms in jobs relay
 
 - Quality control and testing
 	Test with not truncating to 160 characters
 	Test with a real cell phone for fixit and customer (not Google voice)
 	
 - Possible bugs
+	Sends two sms to customer asking for zip code
 	Zip codes don't display in UI when populated programmatically
-	When a customer sends just a photo, it seems to not create a job (when sms is null)
 	
 - Settings
+	Make a setting for the word that Fixits have to reply with to take a job
+	Put messages on their own tab apart from the other settings
+	Settings checkboxes are not currently functional - they only display settings
 	Kill switch for relay and text in
 	Button to reset to default settings
 	Make a setting for the time interval that a fixit has to respond
@@ -221,13 +284,6 @@ FUTURE DEVELOPMENT ROADMAP
 	String to check for for new customer and new fixit (hardcoded currently)
 	Time interval where it won't create new job for same customer
 
-- Jobs relay
-	** Calculate distance between zip codes to figure out what Fixits to relay jobs to
-	Get rid of current jobadmin page and replace with a view
-	Confirmation that we got your job message
-	Put real data validation on mms in jobs relay
-	If job is from customer we don't have zip code then ask for zip code
-
 - Logs
 	Add nid to watchdog messages
 
@@ -235,7 +291,7 @@ FUTURE DEVELOPMENT ROADMAP
 	Check for message with "help" string and respond with link to readme?
 
 - Tests
-	- More tests for jobs relay
+	More tests for jobs relay
 
 - Misc
 	Add job ref field to feedback node

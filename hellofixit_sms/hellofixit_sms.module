@@ -9,7 +9,13 @@ require_once('fixit_terms.class');
 require_once('fixit_test.class');
 require_once('jobadmin.inc');
 require_once('hellofixit_sms.rules.inc');
+require_once('hellofixit_settings.inc');
+require_once('hellofixit_settings_forms.inc');
 
+
+	function hellofixit_dev(){
+		hellofixit_text_in('2543941393','I need my fence mended','fence pic url');
+	}
 
 	/*
 	 * Implementation of hook_form_alter()
@@ -19,16 +25,6 @@ require_once('hellofixit_sms.rules.inc');
 		//dpm($form);
 	}
 
-
-
-
-	function hellofixit_main(){
-		//just used for development
-	}
-
-	
-	
-	
 	function hellofixit_text_in($cell,$sms,$mms){
 		$newText = array();
 		$newText['cell'] = $cell;
@@ -42,14 +38,17 @@ require_once('hellofixit_sms.rules.inc');
 		$terms1 = new fixit_terms();
 		$fTerms = $terms1->main();
 				
+		//get array of settings to know how to deal with jobs
+		$textInSettings = text_in_settings();
+
 		$t1 = new text_in();
-		$t1->main($newText,$fTerms,$fSettings,0);
+		$t1->main($newText,$fTerms,$fSettings,$textInSettings);
 	}
-	
-	
 
+	function hellofixit_cron($a,$testMode){
+		//If testMode is 1, we are running tests from the settings page in Drupal
+		if(!isset($testMode) or $testMode != 1) $testMode = 0;
 
-	function hellofixit_cron($a){
 		//get settings
 		$fSettings = hellofixit_settings();
 
@@ -61,14 +60,14 @@ require_once('hellofixit_sms.rules.inc');
 		//get taxonomy terms
 		$terms1 = new fixit_terms();
 		$fTerms = $terms1->main();
+		
+		//get array of settings to know how to deal with jobs
+		$jobsRelaySettings = jobs_relay_settings();
 
 		//jobs relay
 		$relay1 = new jobs_relay();
-		$relay1->main($fTerms,$fSettings);
+		$relay1->main($fTerms,$fSettings,$jobsRelaySettings,$testMode);
 	}
-	
-	
-	
 	
 	function hellofixit_tests(){
 		//run tests
@@ -76,21 +75,51 @@ require_once('hellofixit_sms.rules.inc');
 		$test_results = $test1->main();
 		if($test_results['all'] !== 1) return;
 	}
-	
-	
-	
-	
+
 	/**
 	 * Implements hook_menu()
 	 */	 
 	function hellofixit_sms_menu(){
+		$items['admin/hellofixit/dev'] = array(
+			'title' => 'Hellofixit dev',
+			'page callback' => 'hellofixit_dev',
+			'access arguments' => array('administer users'),
+			'type' => MENU_NORMAL_ITEM,
+ 		);
 
 		$items['admin/hellofixit/settings'] = array(
 			'title' => 'Hellofixit settings',
 			'page callback' => 'drupal_get_form',
-			'page arguments' => array('hellofixit_form'),
+			'page arguments' => array('hellofixit_settings_form'),
 			'access arguments' => array('administer users'),
 			'type' => MENU_NORMAL_ITEM,
+ 		);
+		
+		$items['admin/hellofixit/settings/general'] = array(
+			'title' => 'settings',
+			'page callback' => 'drupal_get_form',
+			'page arguments' => array('hellofixit_settings_form'),
+			'access arguments' => array('administer users'),
+			'weight' => 1,
+			'type' => MENU_DEFAULT_LOCAL_TASK,
+ 		);
+		
+		$items['admin/hellofixit/settings/text_in_details'] = array(
+			'title' => 'Text-in details',
+			'page callback' => 'drupal_get_form',
+			'page arguments' => array('hellofixit_text_in_details_form'),
+			'access arguments' => array('administer users'),
+			'weight' => 2,
+			'type' => MENU_LOCAL_TASK,
+ 		);
+		
+		$items['admin/hellofixit/settings/job_details'] = array(
+			'title' => 'Job Details',
+			'page callback' => 'drupal_get_form',
+			'page arguments' => array('hellofixit_job_details_form'),
+			'access arguments' => array('administer users'),
+			'weight' => 3,
+			'type' => MENU_LOCAL_TASK,
  		);
 		
 		$items['admin/hellofixit/cron/%'] = array(
@@ -110,253 +139,4 @@ require_once('hellofixit_sms.rules.inc');
 		);
 	
 	return $items;
-	}
-	
-	
-	
-	
-	/**
-	 * Implements hook_form().
-	 * Admin form to configurable welcome message
-	 */
-	function hellofixit_form($form, &$form_state) {
-		$fSettings = hellofixit_settings();
-		
-		$form['tests'] = array	(
-								'#type' => 'submit',
-								'#value' => 'Run Tests',
-								'#submit' => array('hellofixit_tests')
-								);
-
-		foreach($fSettings as $key => $setting){
-			$form[$setting['name']] = array(
-			'#default_value' => variable_get($setting['name']),
-			'#title' => t($setting['title']),
-			'#type' => $setting['field_type'],
-			'#required' => TRUE,
-			);
-		}				
-		
-	return system_settings_form($form);
-	}
-	
-	
-	
-	
-	function hellofixit_reset_settings(){
-		$fSettings = hellofixit_settings();
-		
-		foreach($fSettings as $i){
-			$dSettings = db_delete('variable')
-			->condition('name',$i['name'])
-			->execute();
-		}
-	}
-	
-	
-	
-	
-	function hellofixit_settings(){
-		$fSettings = array();
-		
-		
-		
-		
-		$name = 'url';
-		$default = 'www.notforsissies.net';
-		$title = 'URL of your Drupal site';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-								'default' => $default,
-								'title' => $title,
-								'value' => $value,
-								'field_type' => 'textfield'
-								);
-								
-								
-								
-								
-		$name = 'cron_pw';
-		$default = 'turtle19342spoon';
-		$title = 'Password used for cron job';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-								'default' => $default,
-								'title' => $title,
-								'value' => $value,
-								'field_type' => 'textfield'
-								);
-
-
-								
-		
-		$name = 'admin_cell_formatted';
-		$default = '';
-		$title = 'Admin cell phone - formatted (111) 222-3333';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);		
-		$fSettings[$name] = array(	'name' => $name,
-								'default' => $default,
-								'title' => $title,
-								'value' => $value,
-								'field_type' => 'textfield'								
-								);
-							
-							
-							
-							
-		$name = 'job_relay_time';
-		$default = 600;
-		$title = 'Time interval between relaying a job to the next fixit (seconds)';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-								'default' => $default,
-								'title' => $title,
-								'value' => $value,
-								'field_type' => 'textfield'								
-								);
-
-		
-		
-		
-		$name = 'relay_start_time';
-		$default = '04:00';
-		$title = 'Time of day to begin allowing texts to be sent (PST)';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-								'default' => $default,
-								'title' => $title,
-								'value' => $value,
-								'field_type' => 'textfield'								
-								);
-							
-							
-							
-							
-		$name = 'relay_stop_time';
-		$default = '19:00';
-		$title = 'Time of day to stop allowing texts to be sent (PST)';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-								'default' => $default,
-								'title' => $title,
-								'value' => $value,
-								'field_type' => 'textfield'								
-								);
-							
-							
-							
-							
-		$name = 'delay_request_feedback_min';
-		$default = '24';
-		$title = 'Min. number of hours to wait to ask for feedback';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-								'default' => $default,
-								'title' => $title,
-								'value' => $value,
-								'field_type' => 'textfield'								
-								);
-							
-							
-							
-							
-		$name = 'delay_request_feedback_max';
-		$default = '48';
-		$title = 'Max. number of hours to wait to ask for feedback';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-								'default' => $default,
-								'title' => $title,
-								'value' => $value,
-								'field_type' => 'textfield'								
-								);
-
-
-
-
-		$name = 'sms_job_needs_approval';
-		$default = 'New job needs approval: ';
-		$title = 'SMS sent when new job needs approval by admin';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-								'default' => $default,
-								'title' => $title,
-								'value' => $value,
-								'field_type' => 'textarea'								
-								);
-							
-							
-							
-							
-		$name = 'sms_job_relay_to_fixit';
-		$default = 'Here is a job you might be interested in taking a look at. If you are available to go look at it within 3 hours reply "fixit" in the next 10min: ';
-		$title = 'SMS sent when job is relayed to fixits';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-								'default' => $default,
-								'title' => $title,
-								'value' => $value,
-								'field_type' => 'textarea'
-								);
-							
-							
-							
-							
-		$name = 'sms_job_taken_notify_customer';
-		$default = 'We found a fixit who wants to come look at your job! They are supposed to arrive within 3 hours. You need to call or text them with your location. Here is their cell: ';
-		$title = 'SMS sent to notify a customer that his/her job has been accepted by a fixit';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-								'default' => $default,
-								'title' => $title,
-								'value' => $value,
-								'field_type' => 'textarea'								
-								);
-							
-							
-							
-							
-		$name = 'sms_job_taken_details_to_fixit';
-		$default = 'Here is the cell number for the job you are going to look at. Please get in touch! They are expecting you within 3 hours.';
-		$title = 'SMS sent to give fixit details about a job after they accept it';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-									'default' => $default,
-									'title' => $title,
-									'value' => $value,
-									'field_type' => 'textarea'
-								);
-
-		
-		
-		
-		
-		$name = 'sms_job_request_feedback';
-		$default = 'Hi we would like to find out how it went with your fixit. Please text us back and tell us know!';
-		$title = 'SMS sent to ask a customer for feedback after a fixit accepts their job';
-		if(variable_get($name) == '') variable_set($name,$default);
-		$value = variable_get($name);
-		$fSettings[$name] = array(	'name' => $name,
-									'default' => $default,
-									'title' => $title,
-									'value' => $value,
-									'field_type' => 'textarea'									
-								);
-							
-							
-							
-							
-	return $fSettings;
 	}

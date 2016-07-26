@@ -6,23 +6,18 @@ class fixit_test{
 	}
 	
 	
-	
-	
 	public function main(){
-		
 		$testResults = $this->tests();
 		
 		if($testResults['all'] == 1) drupal_set_message('Passed tests');
 
 		if($testResults['all'] == 0) drupal_set_message('Failed tests');
 
-		dpm($testResults);
+		if(module_exists('devel')) dpm($testResults);
 		
 	}
 	
-	
-	
-	
+		
 	private function tests(){
 		
 		//Disable rule so we don't send any actual text messages during testing
@@ -30,31 +25,36 @@ class fixit_test{
 		$rulesConfig->active = FALSE;
 		$rulesConfig->save();
 
+		//prepopulate test results array 
+		//0s will run test, will populate with 1s if successful
+		//2s will not run
 		$testResults = array(	'all' => 0,
 								'fixit_settings' => 0,
 								'fixit_terms' => 0);
 								
-		//prepopulate test results array with zeros (or two for the ones you don't want to run)
-		$testResults['text_in'] = array('spam' => 2,
-										'spam_react' => 2,
-										'take_job' => 2,
-										'take_job_react' => 2,
-										'feedback' => 2,
-										'feedback_react' => 2,
-										'add_to_job' => 2,
-										'add_to_job_react' => 2,
-										'update_zip' => 2,
-										'update_zip_react' => 2,
-										'new_fixit' => 2,
-										'new_fixit_react' => 2,
-										'new_customer' => 2,
-										'new_customer_react' => 2,
-										'new_job' => 2,
-										'new_job_react' => 2);
-								
-		//prepopulate test results array with zeros (or two for the ones you don't want to run)
-		$testResults['jobs_relay'] = array('needs_approval' => 0);
+		$testResults['text_in'] = array('spam' => 0,
+										'spam_react' => 0,
+										'take_job' => 0,
+										'take_job_react' => 0,
+										'feedback' => 0,
+										'feedback_react' => 0,
+										'add_to_job' => 0,
+										'add_to_job_react' => 0,
+										'update_zip' => 0,
+										'update_zip_react' => 0,
+										'new_fixit' => 0,
+										'new_fixit_react' => 0,
+										'new_customer' => 0,
+										'new_customer_react' => 0,
+										'new_job' => 0,
+										'new_job_react' => 0);
 
+		$testResults['jobs_relay']['needs_approval'] = 0;
+		$testResults['jobs_relay']['approved'] = 0;
+		$testResults['jobs_relay']['taken_not_notified_customer'] = 0;
+		$testResults['jobs_relay']['taken_notified_customer'] = 0;
+		$testResults['jobs_relay']['taken_details_sent_to_fixit'] = 0;
+		
 		//get settings
 		//@todo - need a test for settings, so that it can't proceed without them
 		$fSettings = hellofixit_settings();
@@ -67,18 +67,28 @@ class fixit_test{
 			$testResults['fixit_terms'] = 1;
 		}else{
 			watchdog('hellofixit','fixit terms test failed', WATCHDOG_NOTICE);
-			return $testResults;			
+			return $testResults;
+		}
+
+		//test text_in class
+		foreach($testResults['text_in'] as $key => $test){
+			if($test != 0) continue;
+			$function = 'text_in' . '_' . $key . '_' . 'test';
+			if(!method_exists($this,$function)) continue;
+			$testResults = $this->$function($fTerms, $fSettings, $testResults);
+		}
+
+		//test jobs relay
+		foreach($testResults['jobs_relay'] as $key => $test){
+			if($test != 0) continue;
+			$function = 'jobs_relay' . '_' . $key . '_' . 'test';
+			if(!method_exists($this,$function)) continue;
+			$testResults = $this->$function($fTerms, $fSettings, $testResults);
 		}
 		
-		//test text_in class
-		$testResults['text_in'] = $this->text_in_test($testResults['text_in'],$fTerms,$fSettings);
-		
-		//test jobs relay
-		$testResults['jobs_relay'] = $this->jobs_relay_test ($testResults['jobs_relay'],$fTerms, $fSettings);
-
 		//this comes last after all the tests
 		//if there are any zeros in any of the tests, it keeps 'all' set to zero
-		//accepts with one and two dimensional elements
+		//accepts arrays with one and two dimensional elements
 		$testResults = $this->check_for_zeros($testResults);
 		if(!$testResults['all'] == 1) watchdog('hellofixit','tests all not 1', WATCHDOG_NOTICE);
 		
@@ -86,13 +96,10 @@ class fixit_test{
 		$rulesConfig->active = TRUE;
 		$rulesConfig->save();
 
-
 	return $testResults;
 	}
 	
-	
-	
-	
+		
 	private function check_for_zeros($testResults){
 		foreach($testResults as $i){
 			if($i == 'all') continue;
@@ -108,80 +115,11 @@ class fixit_test{
 	}
 
 	
-	
-	
-	private function text_in_test(array $textInTest, array $fTerms, array $fSettings){
-		if($textInTest['spam'] == 0){
-			$testResults = $this->text_in_spam_test($fTerms, $fSettings);
-			$textInTest['spam'] = $testResults['spam'];
-			$textInTest['spam_react'] = $testResults['spam_react'];
-		}
-
-		if($textInTest['take_job'] == 0){
-			$testResults = $this->text_in_take_job_test($fTerms, $fSettings);
-			$textInTest['take_job'] = $testResults['take_job'];
-			$textInTest['take_job_react'] = $testResults['take_job_react'];
-		}
+	private function text_in_spam_test(array $fTerms, array $fSettings, array $testResults){
+		//get array of settings to know how to deal with jobs
+		$textInSettings = text_in_settings();
+		if(!isset($textInSettings) or $textInSettings == NULL) return $testResults;
 		
-		if($textInTest['feedback'] == 0){
-			$testResults = $this->text_in_feedback_test($fTerms, $fSettings);
-			$textInTest['feedback'] = $testResults['feedback'];
-			$textInTest['feedback_react'] = $testResults['feedback_react'];
-		}
-		
-		if($textInTest['add_to_job'] == 0){
-			$testResults = $this->text_in_add_to_job_test($fTerms, $fSettings);
-			$textInTest['add_to_job'] = $testResults['add_to_job'];
-			$textInTest['add_to_job_react'] = $testResults['add_to_job_react'];
-		}
-		
-		if($textInTest['update_zip'] == 0){
-			$testResults = $this->text_in_update_zip_test($fTerms, $fSettings);
-			$textInTest['update_zip'] = $testResults['update_zip'];
-			$textInTest['update_zip_react'] = $testResults['update_zip_react'];
-		}
-		
-		if($textInTest['new_fixit'] == 0){		
-			$testResults = $this->text_in_new_fixit_test($fTerms, $fSettings);
-			$textInTest['new_fixit'] = $testResults['new_fixit'];
-			$textInTest['new_fixit_react'] = $testResults['new_fixit_react'];
-		}
-		
-		if($textInTest['new_customer'] == 0){
-			$testResults = $this->text_in_new_customer_test($fTerms, $fSettings);
-			$textInTest['new_customer'] = $testResults['new_customer'];
-			$textInTest['new_customer_react'] = $testResults['new_customer_react'];
-		}
-		
-		if($textInTest['new_job'] == 0){
-			$testResults = $this->text_in_new_job_test($fTerms, $fSettings);
-			$textInTest['new_job'] = $testResults['new_job'];
-			$textInTest['new_job_react'] = $testResults['new_job_react'];
-		}
-		
-	return $textInTest;
-	}
-	
-	
-	
-	
-	private function jobs_relay_test(array $jobsRelayTest, array $fTerms, array $fSettings){
-		if($jobsRelayTest['needs_approval'] == 0){
-			$jobsRelayTest['needs_approval'] = $this->jobs_relay_needs_approval_test($fTerms, $fSettings)['needs_approval'];
-		}
-	
-	return $jobsRelayTest;
-	}
-
-	
-	
-	
-	
-	private function text_in_spam_test(array $fTerms, array $fSettings){
-		
-		$testResults = array('spam' => 0,
-							'spam_react' => 0);
-
 		//make a test customer
 		$s1 = new person();
 		$spammerNid = $s1->new_person_node('(512) 333-4444',
@@ -206,8 +144,8 @@ class fixit_test{
 		
 		//simulate a text in
 		$t1 = new text_in();
-		if($t1->main($newText,$fTerms,$fSettings)['spam']['value'] == 1){
-			$testResults['spam'] = 1;
+		if($t1->main($newText,$fTerms,$fSettings,$textInSettings)['spam']['value'] == 1){
+			$testResults['text_in']['spam'] = 1;
 		}else{
 			//if it failed the first test, don't do the second
 			return $testResults;
@@ -235,7 +173,7 @@ class fixit_test{
 
 		$result = db_query($sql,$args)->fetchAssoc();
 
-		if(isset($result) and !$result == NULL) $testResults['spam_react'] = 1;
+		if(isset($result) and !$result == NULL) $testResults['text_in']['spam_react'] = 1;
 		
 		//cleanup
 		node_delete($spammerNid);
@@ -244,12 +182,14 @@ class fixit_test{
 
 	return $testResults;
 	}
+	
+	
+	function text_in_take_job_test(array $fTerms, array $fSettings, array $testResults){
+		//get array of settings to know how to deal with jobs
+		$textInSettings = text_in_settings();
+		if(!isset($textInSettings) or $textInSettings == NULL) return $testResults;
 
-	
-	
-	
-	function text_in_take_job_test(array $fTerms, array $fSettings){
-		//array to report test results
+		//--test procedure
 		//need customer
 		//need job
 		//need fixit
@@ -262,9 +202,6 @@ class fixit_test{
 		//cleanup
 		//return results
 		
-		$testResults = array('take_job' => 0,
-							'take_job_react' => 0);
-		
 		$c1 = new person();
 		$customerNid = $c1->new_person_node('(512) 333-4444',
 						$fTerms['person_types']['customer'],
@@ -273,9 +210,9 @@ class fixit_test{
 						'')->nid;
 
 		//make a test job with customer set to test customer and
-		//status set to needs approval
+		//status set to needs_approval
 		$j1 = new job();
-		$jobNid = $j1->main($customerNid,'','job description','',$fTerms['job_statuses']['needs approval'])->nid;
+		$jobNid = $j1->main($customerNid,'','job description','',$fTerms['job_statuses']['needs_approval'])->nid;
 
 		//make a fixit person
 		$f1 = new person();
@@ -292,7 +229,7 @@ class fixit_test{
 							$fixitNid,
 							'do you want a job',
 							'',
-							$fTerms['text_out_types']['relay to fixit'],
+							$fTerms['text_out_types']['relay_to_fixit'],
 							'(512) 777-8888')->nid;
 
 		//make a simulated text message from the Fixit
@@ -303,8 +240,8 @@ class fixit_test{
 
 		//simulate a text in
 		$t1 = new text_in();
-		if($t1->main($newText,$fTerms,$fSettings)['take_job']['value'] == 1){
-			$testResults['take_job'] = 1;
+		if($t1->main($newText,$fTerms,$fSettings,$textInSettings)['take_job']['value'] == 1){
+			$testResults['text_in']['take_job'] = 1;
 		}else{
 			//if it failed the first test, don't do the second
 			return $testResults;
@@ -335,7 +272,7 @@ class fixit_test{
 		$result = db_query($sql,$args)->fetchAssoc();
 
 		if(isset($result) and !$result == NULL){
-			if($result['job_status'] == $fTerms['job_statuses']['taken-not notified customer']) $testResults['take_job_react'] = 1;
+			if($result['job_status'] == $fTerms['job_statuses']['taken_not_notified_customer']) $testResults['text_in']['take_job_react'] = 1;
 		}
 		
 		//cleanup
@@ -348,18 +285,16 @@ class fixit_test{
 	}
 	
 	
-	
-	
-	
-	
-	
-	
-	private function text_in_feedback_test(array $fTerms, array $fSettings){
-		//array to report test results
+	private function text_in_feedback_test(array $fTerms, array $fSettings, array $testResults){
+		//get array of settings to know how to deal with jobs
+		$textInSettings = text_in_settings();
+		if(!isset($textInSettings) or $textInSettings == NULL) return $testResults;
+
+		//--test procedure
 		//need customer
 		//need fixit
 		//need job with status taken-details sent
-		//need text out to customer with type = request feedback
+		//need text out to customer with type = request_feedback
 		//make a simulated incoming text message array
 		//simulate a new text coming in
 		//see if taken = 1 on array
@@ -369,10 +304,6 @@ class fixit_test{
 		//cleanup (delete) nodes
 		//return results
 		
-		//array to report test results (prepulate with zeros)
-		$testResults = array('feedback' => 0,
-							'feedback_react' => 0);
-
 		$c1 = new person();
 		$customerNid = $c1->new_person_node('(512) 333-4444',
 							$fTerms['person_types']['customer'],
@@ -388,7 +319,7 @@ class fixit_test{
 							'')->nid;
 
 		$j1 = new job();
-		$jobNid = $j1->main($customerNid,$fixitNid,'job description','',$fTerms['job_statuses']['taken-details sent to fixit'])->nid;
+		$jobNid = $j1->main($customerNid,$fixitNid,'job description','',$fTerms['job_statuses']['taken_details_sent_to_fixit'])->nid;
 
 		$t1 = new text_out();
 		$textNid = $t1->main($jobNid,
@@ -396,7 +327,7 @@ class fixit_test{
 							$fixitNid,
 							'feedback request',
 							'',
-							$fTerms['text_out_types']['request feedback'],
+							$fTerms['text_out_types']['request_feedback'],
 							'(512) 333-4444')->nid;
 
 		//make a simulated text message from the Fixit
@@ -407,8 +338,8 @@ class fixit_test{
 						
 		//simulate a text in
 		$t1 = new text_in();
-		if($t1->main($newText,$fTerms,$fSettings)['feedback']['value'] == 1){
-			$testResults['feedback'] = 1;
+		if($t1->main($newText,$fTerms,$fSettings,$textInSettings)['feedback']['value'] == 1){
+			$testResults['text_in']['feedback'] = 1;
 		}else{
 			//if it failed the first test, don't do the second
 			return $testResults;
@@ -433,7 +364,7 @@ class fixit_test{
 						':tenMin' => $tenMin);
 		$result = db_query($sql,$args)->fetchAssoc();
 		if(isset($result) and !$result == NULL){
-			$testResults['feedback_react'] = 1;
+			$testResults['text_in']['feedback_react'] = 1;
 		}
 		
 		//cleanup
@@ -447,10 +378,12 @@ class fixit_test{
 	}
 	
 	
-	
-	
-	private function text_in_add_to_job_test(array $fTerms, array $fSettings){
-		//array to report test results
+	private function text_in_add_to_job_test(array $fTerms, array $fSettings, array $testResults){
+		//get array of settings to know how to deal with jobs
+		$textInSettings = text_in_settings();
+		if(!isset($textInSettings) or $textInSettings == NULL) return $testResults;
+
+		//--test procedure
 		//need customer
 		//need job with customer same as above
 		//make a simulated incoming text message array
@@ -463,10 +396,6 @@ class fixit_test{
 		//cleanup (delete) nodes
 		//return results
 		
-		//array to report test results (prepulate with zeros)
-		$testResults = array('add_to_job' => 0,
-							'add_to_job_react' => 0);
-
 		$c1 = new person();
 		$customerNid = $c1->new_person_node('(512) 333-4444',
 							$fTerms['person_types']['customer'],
@@ -475,7 +404,7 @@ class fixit_test{
 							'')->nid;
 
 		$j1 = new job();
-		$jobNid = $j1->main($customerNid,'','job description 1','',$fTerms['job_statuses']['needs approval'])->nid;
+		$jobNid = $j1->main($customerNid,'','job description 1','',$fTerms['job_statuses']['needs_approval'])->nid;
 
 		//make a simulated text message from the Fixit
 		$newText = array('cell' => '5123334444',
@@ -485,8 +414,8 @@ class fixit_test{
 						
 		//simulate a text in
 		$t1 = new text_in();
-		if($t1->main($newText,$fTerms,$fSettings)['add_to_job']['value'] == 1){
-			$testResults['add_to_job'] = 1;
+		if($t1->main($newText,$fTerms,$fSettings,$textInSettings)['add_to_job']['value'] == 1){
+			$testResults['text_in']['add_to_job'] = 1;
 		}else{
 			//if it failed the first test, don't do the second
 			return $testResults;
@@ -494,7 +423,7 @@ class fixit_test{
 						
 		//now test for react (second test)
 		//test to make sure job sms field is set to new value
-		if(($j1->get_job_info($jobNid)['sms']) == 'job description 2') $testResults['add_to_job_react'] = 1;
+		if(($j1->get_job_info($jobNid)['sms']) == 'job description 2') $testResults['text_in']['add_to_job_react'] = 1;
 		
 		//cleanup
 		node_delete($customerNid);
@@ -504,10 +433,12 @@ class fixit_test{
 	}
 	
 	
-	
-	
-	private function text_in_update_zip_test(array $fTerms, array $fSettings){
-		//array to report test results
+	private function text_in_update_zip_test(array $fTerms, array $fSettings, array $testResults){
+		//get array of settings to know how to deal with jobs
+		$textInSettings = text_in_settings();
+		if(!isset($textInSettings) or $textInSettings == NULL) return $testResults;
+
+		//--test procedure
 		//need customer
 		//make a simulated incoming text message array (with zip in sms field)
 		//simulate a new text coming in
@@ -518,10 +449,6 @@ class fixit_test{
 		//cleanup (delete) nodes
 		//return results
 		
-		//array to report test results (prepulate with zeros)
-		$testResults = array('update_zip' => 0,
-							'update_zip_react' => 0);
-
 		$c1 = new person();
 		$customerNid = $c1->new_person_node('(512) 333-4444',
 							$fTerms['person_types']['customer'],
@@ -537,8 +464,8 @@ class fixit_test{
 						
 		//simulate a text in
 		$t1 = new text_in();
-		if($t1->main($newText,$fTerms,$fSettings)['update_zip']['value'] == 1){
-			$testResults['update_zip'] = 1;
+		if($t1->main($newText,$fTerms,$fSettings,$textInSettings)['update_zip']['value'] == 1){
+			$testResults['text_in']['update_zip'] = 1;
 		}else{
 			//if it failed the first test, don't do the second
 			return $testResults;
@@ -546,7 +473,7 @@ class fixit_test{
 						
 		//now test for react (second test)
 		//see if the zip was changed
-		if($c1->get_person_info($customerNid)['zip'] == 78704) $testResults['update_zip_react'] = 1;
+		if($c1->get_person_info($customerNid)['zip'] == 78704) $testResults['text_in']['update_zip_react'] = 1;
 		
 		//cleanup
 		node_delete($customerNid);
@@ -555,19 +482,17 @@ class fixit_test{
 	}
 	
 	
-	
-	
-	private function text_in_new_fixit_test(array $fTerms, array $fSettings){
-		//array to report test results
+	private function text_in_new_fixit_test(array $fTerms, array $fSettings, array $testResults){
+		//get array of settings to know how to deal with jobs
+		$textInSettings = text_in_settings();
+		if(!isset($textInSettings) or $textInSettings == NULL) return $testResults;
+
+		//--test procedure
 		//make a simulated incoming text message array (with zip in sms field)
 		//simulate a new text coming in
 		//see if new_fixit = 1 on array
 		//record test result
 		
-		//array to report test results (prepulate with zeros)
-		$testResults = array('new_fixit' => 0,
-							'new_fixit_react' => 0);
-
 		//make a simulated text message from the customer
 		$newText = array('cell' => '5127778889',
 						'sms' => 'hhh contractor jjj 12344',
@@ -576,9 +501,9 @@ class fixit_test{
 						
 		//simulate a text in
 		$t1 = new text_in();
-		$textInDetails = $t1->main($newText,$fTerms,$fSettings);
-		if($textInDetails['new_fixit']['value'] == 1){
-			$testResults['new_fixit'] = 1;
+		$textInSettings = $t1->main($newText,$fTerms,$fSettings,$textInSettings);
+		if($textInSettings['new_fixit']['value'] == 1){
+			$testResults['text_in']['new_fixit'] = 1;
 		}else{
 			//if it failed the first test, don't do the second
 			return $testResults;
@@ -595,7 +520,7 @@ class fixit_test{
 		$result = db_query($sql,$args)->fetchAssoc();
 
 		if(isset($result) and !$result == NULL){
-			$testResults['new_fixit_react'] = 1;
+			$testResults['text_in']['new_fixit_react'] = 1;
 
 			//cleanup
 			node_delete($result['fixit_nid']);
@@ -605,19 +530,17 @@ class fixit_test{
 	}
 	
 	
-	
-	
-	private function text_in_new_customer_test(array $fTerms, array $fSettings){
-		//array to report test results
+	private function text_in_new_customer_test(array $fTerms, array $fSettings, array $testResults){
+		//get array of settings to know how to deal with jobs
+		$textInSettings = text_in_settings();
+		if(!isset($textInSettings) or $textInSettings == NULL) return $testResults;
+
+		//--test procedure
 		//make a simulated incoming text message array (with zip in sms field)
 		//simulate a new text coming in
 		//see if new_customer = 1 on array
 		//record test result
 		
-		//array to report test results (prepulate with zeros)
-		$testResults = array('new_customer' => 0,
-							'new_customer_react' => 0);
-
 		//make a simulated text message from the customer
 		$newText = array('cell' => '5123334445',
 						'sms' => 'hhh blah jjj 12344',
@@ -626,17 +549,16 @@ class fixit_test{
 						
 		//simulate a text in
 		$t1 = new text_in();
-		$textInDetails = $t1->main($newText,$fTerms,$fSettings);
-		if($textInDetails['new_customer']['value'] == 1){
-			$testResults['new_customer'] = 1;
+		$textInSettings = $t1->main($newText,$fTerms,$fSettings,$textInSettings);
+		if($textInSettings['new_customer']['value'] == 1){
+			$testResults['text_in']['new_customer'] = 1;
 		}else{
 			//if it failed the first test, don't do the second
 			return $testResults;
 		}
 		
 		//now test for react (second test)
-		//test to make sure new customer exists
-		
+		//test to make sure new customer exists		
 		$sql = "	select 		cp.entity_id as customer_nid,
 								n.created as when_created,
 								cr.entity_id as job_nid
@@ -652,7 +574,7 @@ class fixit_test{
 		$result = db_query($sql,$args)->fetchAssoc();
 
 		if(isset($result) and !$result == NULL){
-			$testResults['new_customer_react'] = 1;
+			$testResults['text_in']['new_customer_react'] = 1;
 
 			//cleanup
 			node_delete($result['customer_nid']);
@@ -660,23 +582,21 @@ class fixit_test{
 		}
 	
 	return $testResults;
-	}
+	}	
 	
 	
-	
-	
-	private function text_in_new_job_test(array $fTerms, array $fSettings){
-		//array to report test results
+	private function text_in_new_job_test(array $fTerms, array $fSettings, array $testResults){
+		//get array of settings to know how to deal with jobs
+		$textInSettings = text_in_settings();
+		if(!isset($textInSettings) or $textInSettings == NULL) return $testResults;
+
+		//--test procedure
 		//make a new customer
 		//make a simulated incoming text message array (with zip in sms field)
 		//simulate a new text coming in
 		//see if new_customer = 1 on array
 		//record test result
 		
-		//array to report test results (prepulate with zeros)
-		$testResults = array('new_job' => 0,
-							'new_job_react' => 0);
-
 		$c1 = new person();
 		$customerNid = $c1->new_person_node('(512) 333-4445',
 						$fTerms['person_types']['customer'],
@@ -692,9 +612,9 @@ class fixit_test{
 						
 		//simulate a text in
 		$t1 = new text_in();
-		$textInDetails = $t1->main($newText,$fTerms,$fSettings);
-		if($textInDetails['new_job']['value'] == 1){
-			$testResults['new_job'] = 1;
+		$textInSettings = $t1->main($newText,$fTerms,$fSettings,$textInSettings);
+		if($textInSettings['new_job']['value'] == 1){
+			$testResults['text_in']['new_job'] = 1;
 		}else{
 			//if it failed the first test, don't do the second
 			return $testResults;
@@ -712,7 +632,7 @@ class fixit_test{
 		$result = db_query($sql,$args)->fetchAssoc();
 
 		if(isset($result) and !$result == NULL){
-			$testResults['new_job_react'] = 1;
+			$testResults['text_in']['new_job_react'] = 1;
 
 			//cleanup
 			node_delete($result['job_nid']);
@@ -724,15 +644,8 @@ class fixit_test{
 	}
 	
 	
-	
-	
-	
-	
-	
-	
-	
-	private function jobs_relay_needs_approval_test(array $fTerms, array $fSettings){
-		//array to report test results
+	private function jobs_relay_needs_approval_test(array $fTerms, array $fSettings, array $testResults){
+		//--test procedure
 		//make a new customer
 		//make a new job
 		//call hellofixit_cron
@@ -740,9 +653,6 @@ class fixit_test{
 		//record test result
 		//cleanup
 		
-		//array to report test results (prepulate with zeros)
-		$testResults = array('needs_approval' => 0);
-
 		$c1 = new person();
 		$customerNid = $c1->new_person_node('(512) 333-4445',
 						$fTerms['person_types']['customer'],
@@ -751,12 +661,12 @@ class fixit_test{
 						'')->nid;
 						
 		//make a test job with customer set to test customer and
-		//status set to needs approval
+		//status set to needs_approval
 		$j1 = new job();
-		$jobNid = $j1->main($customerNid,'','job aaa bbb','',$fTerms['job_statuses']['needs approval'])->nid;
+		$jobNid = $j1->main($customerNid,'','job aaa bbb','',$fTerms['job_statuses']['needs_approval'])->nid;
 
 		//run the jobs relay
-		hellofixit_cron($fSettings['cron_pw']['value']);
+		hellofixit_cron($fSettings['cron_pw']['value'],$testMode = 1);
 
 		//find the text out that was just created
 		$sql = "	select 		cr.entity_id as text_out_nid
@@ -770,24 +680,319 @@ class fixit_test{
 		$args = array(	':customerNid' => $customerNid,
 						':oneMin' => $oneMin);
 
-		$result = db_query($sql,$args)->fetchAssoc();
+		//$result = db_query($sql,$args)->fetchAssoc();
+		$result = db_query($sql,$args);
+		
+		//find all the text out nodes created during this test
+		if(isset($result) and $result !== NULL){
+			foreach($result as $r){
+				$textOutNids[] = $r->text_out_nid;
+			}
+		}
+		
+		if(count($textOutNids) == 0) return $testResults;
 
-		if(isset($result) and !$result == NULL) $testResults['needs_approval'] = 1;
-
+		$testResults['jobs_relay']['needs_approval'] = 1;
+		
 		//cleanup
 		node_delete($customerNid);
 		node_delete($jobNid);
-		node_delete($result['text_out_nid']);
-	
+
+		if(isset($textOutNids) and !$textOutNids == NULL){
+			foreach($textOutNids as $node){
+				node_delete($node);
+			}
+		}
+		
 	return $testResults;
 	}
-
-	
-
 	
 	
+	private function jobs_relay_approved_test(array $fTerms, array $fSettings, array $testResults){
+		//--test procedure
+		//make a new customer
+		//make a new fixit
+		//make a new job
+		//call hellofixit_cron
+		//see if there is a text out
+		//record test result
+		//cleanup
+		
+		//make a test customer
+		$c1 = new person();
+		$customerNid = $c1->new_person_node('(512) 333-4445',
+						$fTerms['person_types']['customer'],
+						'chrisfirst',
+						'chrislast',
+						76712)->nid;
+						
+		//make a test fixit
+		$f1 = new person();
+		$fixitNid = $f1->new_person_node('(512) 777-8888',
+							$fTerms['person_types']['fixit'],
+							'frankfirst',
+							'franklast',
+							76712)->nid;
 
+		//make a test job
+		$j1 = new job();
+		$jobNid = $j1->main($customerNid,'','job aaa bbb','',$fTerms['job_statuses']['approved'])->nid;
 
+		//run the jobs relay
+		hellofixit_cron($fSettings['cron_pw']['value'],$testMode = 1);
 
+		//find the text out that was just created
+		$sql = "	select 		cr.entity_id as text_out_nid
+					from 		field_data_field_fixit_ref cr
+					join		node n on n.nid = cr.entity_id
+					where 		cr.field_fixit_ref_target_id = :fixitNid
+					and			cr.bundle = 'text_out'
+					and			n.created > :oneMin";
+					
+		$oneMin = time() - 60;
+		$args = array(	':fixitNid' => $fixitNid,
+						':oneMin' => $oneMin);
+		$result = db_query($sql,$args);
+		
+		//find all the text out nodes created during this test
+		if(isset($result) and $result !== NULL){
+			foreach($result as $r){
+			$textOutNids[] = $r->text_out_nid;
+			}
+		}
+		
+		if(count($textOutNids) == 0) return $testResults;
+
+		$testResults['jobs_relay']['approved'] = 1;
+
+		//cleanup
+		node_delete($customerNid);
+		node_delete($fixitNid);
+		node_delete($jobNid);
+
+		if(isset($textOutNids) and !$textOutNids == NULL){
+			foreach($textOutNids as $node){
+				node_delete($node);
+			}
+		}
+
+	return $testResults;
+	}	
+
+	
+	private function jobs_relay_taken_not_notified_customer_test(array $fTerms, array $fSettings, array $testResults){
+		//--test procedure
+		//make a new customer
+		//make a new fixit
+		//make a new job
+		//call hellofixit_cron
+		//see if there is a text out
+		//record test result
+		//cleanup
+		
+		//make a test customer
+		$c1 = new person();
+		$customerNid = $c1->new_person_node('(512) 333-4445',
+						$fTerms['person_types']['customer'],
+						'chrisfirst',
+						'chrislast',
+						76712)->nid;
+						
+		//make a test fixit
+		$f1 = new person();
+		$fixitNid = $f1->new_person_node('(512) 777-8888',
+							$fTerms['person_types']['fixit'],
+							'frankfirst',
+							'franklast',
+							76712)->nid;
+
+		//make a test job
+		$j1 = new job();
+		$jobNid = $j1->main($customerNid,$fixitNid,'job aaa bbb','',$fTerms['job_statuses']['taken_not_notified_customer'])->nid;
+
+		//run the jobs relay
+		hellofixit_cron($fSettings['cron_pw']['value'],$testMode = 1);
+
+		//find the text out that was just created
+		$sql = "	select 		cr.entity_id as text_out_nid
+					from 		field_data_field_customer_ref cr
+					join		node n on n.nid = cr.entity_id
+					where 		cr.field_customer_ref_target_id = :customerNid
+					and			cr.bundle = 'text_out'
+					and			n.created > :oneMin";
+					
+		$oneMin = time() - 60;
+		$args = array(	':customerNid' => $customerNid,
+						':oneMin' => $oneMin);
+		$result = db_query($sql,$args);
+		
+		//find all the text out nodes created during this test
+		if(isset($result) and $result !== NULL){
+			foreach($result as $r){
+			$textOutNids[] = $r->text_out_nid;
+			}
+		}
+		
+		if(count($textOutNids) == 0) return $testResults;
+
+		$testResults['jobs_relay']['taken_not_notified_customer'] = 1;
+
+		//cleanup
+		node_delete($customerNid);
+		node_delete($fixitNid);
+		node_delete($jobNid);
+
+		if(isset($textOutNids) and !$textOutNids == NULL){
+			foreach($textOutNids as $node){
+				node_delete($node);
+			}
+		}
+
+	return $testResults;
+	}	
+	
+
+	private function jobs_relay_taken_notified_customer_test(array $fTerms, array $fSettings, array $testResults){
+		//--test procedure
+		//make a new customer
+		//make a new fixit
+		//make a new job
+		//call hellofixit_cron
+		//see if there is a text out
+		//record test result
+		//cleanup
+		
+		//make a test customer
+		$c1 = new person();
+		$customerNid = $c1->new_person_node('(512) 333-4445',
+						$fTerms['person_types']['customer'],
+						'chrisfirst',
+						'chrislast',
+						76712)->nid;
+						
+		//make a test fixit
+		$f1 = new person();
+		$fixitNid = $f1->new_person_node('(512) 777-8888',
+							$fTerms['person_types']['fixit'],
+							'frankfirst',
+							'franklast',
+							76712)->nid;
+
+		//make a test job
+		$j1 = new job();
+		$jobNid = $j1->main($customerNid,$fixitNid,'job aaa bbb','',$fTerms['job_statuses']['taken_notified_customer'])->nid;
+
+		//run the jobs relay
+		hellofixit_cron($fSettings['cron_pw']['value'],$testMode = 1);
+
+		//find the text out that was just created
+		$sql = "	select 		cr.entity_id as text_out_nid
+					from 		field_data_field_fixit_ref cr
+					join		node n on n.nid = cr.entity_id
+					where 		cr.field_fixit_ref_target_id = :fixitNid
+					and			cr.bundle = 'text_out'
+					and			n.created > :oneMin";
+					
+		$oneMin = time() - 60;
+		$args = array(	':fixitNid' => $fixitNid,
+						':oneMin' => $oneMin);
+		$result = db_query($sql,$args);
+		
+		//find all the text out nodes created during this test
+		if(isset($result) and $result !== NULL){
+			foreach($result as $r){
+			$textOutNids[] = $r->text_out_nid;
+			}
+		}
+		
+		if(count($textOutNids) == 0) return $testResults;
+
+		$testResults['jobs_relay']['taken_notified_customer'] = 1;
+
+		//cleanup
+		node_delete($customerNid);
+		node_delete($fixitNid);
+		node_delete($jobNid);
+
+		if(isset($textOutNids) and !$textOutNids == NULL){
+			foreach($textOutNids as $node){
+				node_delete($node);
+			}
+		}
+
+	return $testResults;
+	}
+	
+	
+	private function jobs_relay_taken_details_sent_to_fixit_test(array $fTerms, array $fSettings, array $testResults){
+		//--test procedure
+		//make a new customer
+		//make a new fixit
+		//make a new job
+		//call hellofixit_cron
+		//see if there is a text out
+		//record test result
+		//cleanup
+		
+		//make a test customer
+		$c1 = new person();
+		$customerNid = $c1->new_person_node('(512) 333-4445',
+						$fTerms['person_types']['customer'],
+						'chrisfirst',
+						'chrislast',
+						76712)->nid;
+						
+		//make a test fixit
+		$f1 = new person();
+		$fixitNid = $f1->new_person_node('(512) 777-8888',
+							$fTerms['person_types']['fixit'],
+							'frankfirst',
+							'franklast',
+							76712)->nid;
+
+		//make a test job
+		$j1 = new job();
+		$jobNid = $j1->main($customerNid,$fixitNid,'job aaa bbb','',$fTerms['job_statuses']['taken_details_sent_to_fixit'])->nid;
+
+		//run the jobs relay
+		hellofixit_cron($fSettings['cron_pw']['value'],$testMode = 1);
+
+		//find the text out that was just created
+		$sql = "	select 		cr.entity_id as text_out_nid
+					from 		field_data_field_customer_ref cr
+					join		node n on n.nid = cr.entity_id
+					where 		cr.field_customer_ref_target_id = :customerNid
+					and			cr.bundle = 'text_out'
+					and			n.created > :oneMin";
+					
+		$oneMin = time() - 60;
+		$args = array(	':customerNid' => $customerNid,
+						':oneMin' => $oneMin);
+		$result = db_query($sql,$args);
+		
+		//find all the text out nodes created during this test
+		if(isset($result) and $result !== NULL){
+			foreach($result as $r){
+			$textOutNids[] = $r->text_out_nid;
+			}
+		}
+		
+		if(count($textOutNids) == 0) return $testResults;
+
+		$testResults['jobs_relay']['taken_details_sent_to_fixit'] = 1;
+
+		//cleanup
+		node_delete($customerNid);
+		node_delete($fixitNid);
+		node_delete($jobNid);
+
+		if(isset($textOutNids) and !$textOutNids == NULL){
+			foreach($textOutNids as $node){
+				node_delete($node);
+			}
+		}
+
+	return $testResults;
+	}
 
 	}

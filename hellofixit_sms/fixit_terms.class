@@ -1,8 +1,7 @@
 <?php
 
 class fixit_terms{
-	
-	
+		
 	public function main(){
 		$fTerms = $this->get_fixit_terms_from_db();
 	
@@ -12,20 +11,21 @@ class fixit_terms{
 	private function get_fixit_terms_from_db(){
 	$exist = 0;
 	$job_statuses = array(
-						'needs approval' => 0,
+						'need_zip' => 0,
+						'needs_approval' => 0,
 						'approved' => 0,
 						'denied' => 0,
-						'taken-not notified customer' => 0,
-						'taken-notified customer' => 0,
-						'taken-details sent to fixit' => 0,
-						'feedback requested' => 0);
-						
+						'taken_not_notified_customer' => 0,
+						'taken_notified_customer' => 0,
+						'taken_details_sent_to_fixit' => 0,
+						'feedback_requested' => 0);
 	$text_out_types = array(
-						'notify customer job is taken' => 0,
-						'relay to fixit' => 0,
-						'request approval' => 0,
-						'request feedback' => 0,
-						'send details to fixit' => 0);
+						'request_zip' => 0,
+						'notify_customer_job_is_taken' => 0,
+						'relay_to_fixit' => 0,
+						'request_approval' => 0,
+						'request_feedback' => 0,
+						'send_details_to_fixit' => 0);
 	$person_types = array(
 						'customer' => 0,
 						'fixit' => 0,
@@ -37,7 +37,6 @@ class fixit_terms{
 						'text_out_types' => $text_out_types,
 						'person_types' => $person_types);
 
-
 	$sql =	"select		tv.vid,
 						tv.name as vocab,
 						td.tid as term_ref,
@@ -47,7 +46,6 @@ class fixit_terms{
 			where		tv.name = 'job_statuses'
 			or			tv.name = 'person_types'
 			or			tv.name = 'text_out_types'";
-
 	
 	$results = db_query($sql);
 
@@ -56,14 +54,11 @@ class fixit_terms{
 		$fTerms[$r->vocab][$r->term] = $r->term_ref;
 	}
 	
-	
 	//Check to make sure there are no zeros left
 	$fTerms = $this->check_for_zeros($fTerms);
+
 	return $fTerms;					
 	}
-
-
-
 
 	private function check_for_zeros($fTerms){
 		foreach($fTerms as $i){

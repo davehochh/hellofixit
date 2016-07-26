@@ -11,7 +11,7 @@ function hellofixit_setup_uuid_features_default_terms() {
   $terms = array();
 
   $terms[] = array(
-    'name' => 'send details to fixit',
+    'name' => 'send_details_to_fixit',
     'description' => '',
     'format' => 'filtered_html',
     'weight' => 0,
@@ -35,7 +35,7 @@ function hellofixit_setup_uuid_features_default_terms() {
     'vocabulary_machine_name' => 'person_types',
   );
   $terms[] = array(
-    'name' => 'taken-notified customer',
+    'name' => 'taken_notified_customer',
     'description' => '',
     'format' => 'filtered_html',
     'weight' => 0,
@@ -43,7 +43,7 @@ function hellofixit_setup_uuid_features_default_terms() {
     'vocabulary_machine_name' => 'job_status',
   );
   $terms[] = array(
-    'name' => 'taken-details sent to fixit',
+    'name' => 'taken_details_sent_to_fixit',
     'description' => '',
     'format' => 'filtered_html',
     'weight' => 0,
@@ -51,7 +51,7 @@ function hellofixit_setup_uuid_features_default_terms() {
     'vocabulary_machine_name' => 'job_status',
   );
   $terms[] = array(
-    'name' => 'taken-not notified customer',
+    'name' => 'taken_not_notified_customer',
     'description' => '',
     'format' => 'filtered_html',
     'weight' => 0,
@@ -59,7 +59,7 @@ function hellofixit_setup_uuid_features_default_terms() {
     'vocabulary_machine_name' => 'job_status',
   );
   $terms[] = array(
-    'name' => 'request feedback',
+    'name' => 'request_feedback',
     'description' => '',
     'format' => 'filtered_html',
     'weight' => 0,
@@ -83,7 +83,7 @@ function hellofixit_setup_uuid_features_default_terms() {
     'vocabulary_machine_name' => 'person_types',
   );
   $terms[] = array(
-    'name' => 'request approval',
+    'name' => 'request_approval',
     'description' => '',
     'format' => 'filtered_html',
     'weight' => 0,
@@ -99,7 +99,7 @@ function hellofixit_setup_uuid_features_default_terms() {
     'vocabulary_machine_name' => 'job_status',
   );
   $terms[] = array(
-    'name' => 'feedback requested',
+    'name' => 'feedback_requested',
     'description' => '',
     'format' => 'filtered_html',
     'weight' => 0,
@@ -107,7 +107,7 @@ function hellofixit_setup_uuid_features_default_terms() {
     'vocabulary_machine_name' => 'job_status',
   );
   $terms[] = array(
-    'name' => 'needs approval',
+    'name' => 'needs_approval',
     'description' => '',
     'format' => 'filtered_html',
     'weight' => 0,
@@ -115,7 +115,15 @@ function hellofixit_setup_uuid_features_default_terms() {
     'vocabulary_machine_name' => 'job_status',
   );
   $terms[] = array(
-    'name' => 'relay to fixit',
+    'name' => 'need_zip',
+    'description' => '',
+    'format' => 'filtered_html',
+    'weight' => 0,
+    'uuid' => '23cedffc-0d54-466d-9f31-77c7e5594632',
+    'vocabulary_machine_name' => 'job_status',
+  );
+  $terms[] = array(
+    'name' => 'relay_to_fixit',
     'description' => '',
     'format' => 'filtered_html',
     'weight' => 0,
@@ -123,7 +131,15 @@ function hellofixit_setup_uuid_features_default_terms() {
     'vocabulary_machine_name' => 'text_out_types',
   );
   $terms[] = array(
-    'name' => 'notify customer job is taken',
+    'name' => 'request_zip',
+    'description' => '',
+    'format' => 'filtered_html',
+    'weight' => 0,
+    'uuid' => '455de26b-3f5c-42ee-9b54-9327c541664e',
+    'vocabulary_machine_name' => 'text_out_types',
+  );  
+  $terms[] = array(
+    'name' => 'notify_customer_job_is_taken',
     'description' => '',
     'format' => 'filtered_html',
     'weight' => 0,

@@ -28,7 +28,9 @@ class text_out{
 		$tnode->field_fixit_ref['und'][0]['target_id'] = $textData['fixit_ref'];
 		$tnode->field_sms['und'][0]['value'] = $textData['sms'];
 		$tnode->field_mms['und'][0]['value'] = $textData['mms'];
-		$tnode->field_text_type['und'][0]['tid'] = $textData['text_type_ref'];
+		if($textData['text_type_ref']){
+			$tnode->field_text_type['und'][0]['tid'] = $textData['text_type_ref'];
+		}
 		$tnode->field_cell_phone['und'][0]['value'] = preg_replace('/[^0-9]/','',$textData['cell_formatted']);
 		$tnode->uid = 1;
 		node_save($tnode);

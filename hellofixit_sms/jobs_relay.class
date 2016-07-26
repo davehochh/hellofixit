@@ -2,40 +2,17 @@
 
 class jobs_relay{
 	
-	public function main(array $fTerms, array $fSettings){
-			$jobs = $this->get_jobs_to_relay($fSettings);
-			$this->relay_jobs($jobs,$fTerms,$fSettings);			
+	public function main(array $fTerms, array $fSettings, array $jobsRelaySettings, $testMode){
+		//If testMode is 1, we are running tests from the settings page in Drupal
+		//In test mode, ignore the quiet hours setting, and do not attempt to use the zipAPI service
+		if(!isset($testMode) or $testMode != 1){
+			$testMode = 0;
+			if($this->check_for_quiet_hours($fSettings) == 1) return;
+		}
+		
+		$jobs = $this->get_jobs_to_relay($fSettings,$testMode);
+		$this->relay_jobs($jobs,$fTerms,$fSettings,$jobsRelaySettings,$testMode);
 	}
-	
-	
-	
-	
-	private function duplicate_text($cellFormatted, $jobNid, $textOutType){
-
-		//unformat cellFormatted
-		$cell = preg_replace('/[^0-9]/','',$cellFormatted);
-		
-		$sql = "select		*
-				from		field_data_field_cell_phone cp
-				join		field_data_field_text_type tt on tt.entity_id = cp.entity_id
-				join		field_data_field_job j on j.entity_id = cp.entity_id
-				where		cp.field_cell_phone_value = :cell
-				and			cp.bundle = 'text_out'
-				and			j.field_job_target_id = :job_nid
-				and			tt.field_text_type_tid = :text_type";
-				
-				
-		$args = array(':cell' => $cell,
-						':job_nid' => $jobNid,
-						':text_type' => $textOutType);
-		$result = db_query($sql,$args)->fetchAssoc();
-		
-		if(!$result == NULL) return 1;
-		
-	return 0;
-	}
-
-
 
 	private function get_jobs_to_relay($fSettings){
 		$sql = "select		s.entity_id as job_nid,
@@ -49,7 +26,8 @@ class jobs_relay{
 							cpc.field_cell_phone_value as customer_cell,
 							cpf.field_cell_phone_value as fixit_cell,
 							fn.field_first_name_value as first_name,
-							ln.field_last_name_value as last_name
+							ln.field_last_name_value as last_name,
+							fa.field_address_postal_code as zip
 				from		{field_data_field_status s}
 				left join	{field_data_field_customer_ref cr} on cr.entity_id = s.entity_id
 				left join	{field_data_field_fixit_ref fr} on fr.entity_id = s.entity_id
@@ -61,6 +39,7 @@ class jobs_relay{
 				left join	{field_data_field_cell_phone cpf} on cpf.entity_id = fr.field_fixit_ref_target_id
 				left join	{field_data_field_first_name fn} on fn.entity_id = cr.field_customer_ref_target_id
 				left join	{field_data_field_last_name ln} on ln.entity_id = cr.field_customer_ref_target_id
+				left join	field_data_field_address fa on fa.entity_id = cr.field_customer_ref_target_id
 				where		s.bundle = 'job'
 				order by	s.entity_id DESC,
 							n.created DESC";
@@ -82,43 +61,55 @@ class jobs_relay{
 		}
 	return $jobs;
 	}
-	
-	
-	
-	
-	private function relay_jobs($jobs,$fTerms,$fSettings){
-		//if the time is during quiet hours, don't proceed
-		date_default_timezone_set('America/Los_Angeles');
-		if(!(time() > strtotime($fSettings['relay_start_time']['value']) && time() < strtotime($fSettings['relay_stop_time']['value']))){
-			return;
-		}
-		
-		
-		
-		
+
+	private function relay_jobs($jobs,$fTerms,$fSettings,$jobsRelaySettings,$testMode){
 		foreach($jobs as $j){
-
-			//validate job data
-			if($j->job_nid == NULL) $j->job_nid = 0;
-			if($j->customer_nid == NULL) $j->customer_nid = 0;
-			if($j->fixit_nid == NULL) $j->fixit_nid = 0;
-			if($j->sms == NULL) continue;
-			if($j->mms == NULL) $j->mms = ''; //@todo put real validation here later
+			$j = $this->validate_job_data($j);
+			if(!is_object($j) && $j == 0) return;
 			
-			
-			
-			
-		switch($j->job_status){
-			
+			//This loop sets the value elements in the jobsDetailsSettings array
+			foreach($jobsRelaySettings as $function => $setting){
+				//If the setting is not set to active, skip it
+				if($setting['active'] !== 1) continue;
+	
+				$function = 'check_' . $function;
+				
+				//If someone added to the array of $jobsRelaySettings but forgot to add a method, skip it
+				if(!method_exists($this,$function)) continue;
 
+				$jobsRelaySettings = $this->$function($j,$jobsRelaySettings,$fTerms,$fSettings,$testMode);
+			}
 
+			//This loop performs an action when the value is set to 1 for any of the array elements
+			foreach($jobsRelaySettings as $function => $setting){
+				//If the setting is not set to active, skip it
+				if($setting['active'] !== 1) continue;
+	
+				//If the setting is not set to active, skip it
+				if($setting['value'] !== 1) continue;
 
+				$function = 'react_' . $function;
+				
+				//If someone added to the array of $jobsRelaySettings but forgot to add a method, skip it
+				if(!method_exists($this,$function)) continue;
 
-		//job status = needs approval
-		case $fTerms['job_statuses']['needs approval']:
-			//if we have already sent a text to the admin for this job, don't send another one
-			if(!$j->last_text == NULL) break;
+				$this->$function($j,$jobsRelaySettings,$fTerms,$fSettings,$testMode);
+			}
+		}
+	}
 
+	private function check_job_missing_zip($j,$jobsRelaySettings,$fTerms,$fSettings){
+		//Check if the customer has a zip code
+		if(preg_match('/[0-9]{5}/',$j->zip,$matches)){
+			$jobsRelaySettings['job_missing_zip']['value'] = 0;
+		}else{
+			$jobsRelaySettings['job_missing_zip']['value'] = 1;
+		}
+
+	return $jobsRelaySettings;
+	}
+
+	private function react_job_missing_zip($j,$jobsRelaySettings,$fTerms,$fSettings){
 			//arguments for text out: 
 			//$job_ref,
 			//$customer_ref,
@@ -128,161 +119,214 @@ class jobs_relay{
 			//$text_type_ref,
 			//$cell_formatted
 			$t1 = new text_out();
-			$t1->main($j->job_nid,
+			$t1->main	($j->job_nid,
+						$j->customer_nid,
+						0,
+						$fSettings['sms_need_customer_zip']['value'],
+						'',
+						$fTerms['text_out_types']['request_zip'],
+						$j->customer_cell);
+	}
+	
+	private function check_job_status_needs_approval($j,$jobsRelaySettings,$fTerms,$fSettings){
+		//Check job status
+		if($j->job_status !== $fTerms['job_statuses']['needs_approval']) return $jobsRelaySettings;
+		
+		//Check if the customer has a zip
+		if($jobsRelaySettings['job_missing_zip']['value'] !== 1) return $jobsRelaySettings;
+
+		//Check job status
+		if($j->job_status !== $fTerms['job_statuses']['needs_approval']) return $jobsRelaySettings;
+
+		$jobsRelaySettings['job_status_needs_approval']['value'] = 1;
+
+	return $jobsRelaySettings;
+	}
+	
+	private function react_job_status_needs_approval($j,$jobsRelaySettings,$fTerms,$fSettings){
+		//if we have already sent a text to the admin for this job, don't send another one
+		if($j->last_text !== NULL) return $jobsRelaySettings;
+
+		//arguments for text out: 
+		//$job_ref,
+		//$customer_ref,
+		//$fixit_ref,
+		//$sms,
+		//$mms,
+		//$text_type_ref,
+		//$cell_formatted
+		$t1 = new text_out();
+		$t1->main	(	$j->job_nid,
 						$j->customer_nid,
 						0,
 						$fSettings['sms_job_needs_approval']['value'] . $fSettings['url']['value'] . '/jobadmin/new/' . $j->job_nid,
 						$j->mms,
-						$fTerms['text_out_types']['request approval'],
-						$fSettings['admin_cell_formatted']['value']);
-		break;
-			
+						$fTerms['text_out_types']['request_approval'],
+						$fSettings['admin_cell_formatted']['value']
+					);
+	}
+	
+	private function check_job_status_approved($j,$jobsRelaySettings,$fTerms,$fSettings){
+		//Check job status
+		if($j->job_status !== $fTerms['job_statuses']['approved']) return $jobsRelaySettings;
 
+		//Check if the customer has a zip
+		//If for some reason it gets approved but we don't have a zip, don't go any further
+		if($jobsRelaySettings['job_missing_zip']['value'] == 1) return $jobsRelaySettings;
 
+		$jobsRelaySettings['job_status_approved']['value'] = 1;
 
+	return $jobsRelaySettings;
+	}
+	
+	private function react_job_status_approved($j,$jobsRelaySettings,$fTerms,$fSettings,$testMode){
+		$fixit = $this->get_fixit($fTerms,$fSettings,$j,$testMode);
+		if(!isset($fixit)) return;
 
-		//job status = approved
-		case $fTerms['job_statuses']['approved']:
+		//if we have ever sent a text to this cell number about this job, 
+		//with this status, don't send another one
+		if($this->check_for_duplicate_text($fixit,$j,$fTerms) == 1) return $jobsRelaySettings;
 
-			$fixit = $this->get_fixit($fTerms,$fSettings);
-
-			if(!isset($fixit)) break;
-			
-			//if we have ever sent a text to this cell number about this job, 
-			//with this status, don't send another one
-			if($this->duplicate_text($fixit->cell_formatted,
-									$j->job_nid,
-									$fTerms['text_out_types']['relay to fixit']) == 1) break;
-			
-			//arguments for text out: 
-			//$job_ref,
-			//$customer_ref,
-			//$fixit_ref,
-			//$sms,
-			//$mms,
-			//$text_type_ref,
-			//$cell_formatted
-			$t1 = new text_out();
-			$t1->main($j->job_nid,
-						0,
-						$fixit->fixit_nid,
-						$fSettings['sms_job_relay_to_fixit']['value'] . $j->sms,
-						$j->mms,
-						$fTerms['text_out_types']['relay to fixit'],
-						$fixit->cell_formatted);
-
-		break;
-			
-
-
-
-
-		//job status = denied
-		case $fTerms['job_statuses']['denied']:
-			// do nothing
-		break;
-
+		//arguments for text out: 
+		//$job_ref,
+		//$customer_ref,
+		//$fixit_ref,
+		//$sms,
+		//$mms,
+		//$text_type_ref,
+		//$cell_formatted
+		$t1 = new text_out();
+		$t1->main	($j->job_nid,
+					0,
+					$fixit->fixit_nid,
+					$fSettings['sms_job_relay_to_fixit']['value'] . $j->sms,
+					$j->mms,
+					$fTerms['text_out_types']['relay_to_fixit'],
+					$fixit->cell_formatted);
+	}
+	
+	private function check_job_status_denied($j,$jobsRelaySettings,$fTerms,$fSettings){
+		//Check job status
+		if($j->job_status !== $fTerms['job_statuses']['denied']) return $jobsRelaySettings;
 		
-		
-		
-		
-		//job status taken-not notified customer
-		case $fTerms['job_statuses']['taken-not notified customer']:
-			//arguments for text out: 
-			//$job_ref,
-			//$customer_ref,
-			//$fixit_ref,
-			//$sms,
-			//$mms,
-			//$text_type_ref,
-			//$cell_formatted
-			$t1 = new text_out();
-			$t1->main($j->job_nid,
-						$j->customer_nid,
-						$j->fixit_nid,
-						$fSettings['sms_job_taken_notify_customer']['value'] . ' ' . $j->fixit_cell,
-						$j->mms,
-						$fTerms['text_out_types']['notify customer job is taken'],
-						$j->customer_cell);
+		$jobsRelaySettings['job_status_denied']['value'] = 1;
 
-			$j1 = new job();
-			$j1->set_job_status($j->job_nid,
-								$fTerms['job_statuses']['taken-notified customer']);
-		break;
-		
-		
-		
-		
-		//job status = taken-notified customer
-		case $fTerms['job_statuses']['taken-notified customer']:
-			$t1 = new text_out();
-			$t1->main($j->job_nid,
-						$j->customer_nid,
-						$j->fixit_nid,
-						$fSettings['sms_job_taken_details_to_fixit']['value'] . ' ' . $j->customer_cell,
-						$j->mms,
-						$fTerms['text_out_types']['send details to fixit'],
-						$j->fixit_cell);
+	return $jobsRelaySettings;		
+	}
+	
+	private function check_job_status_taken_not_notified_customer($j,$jobsRelaySettings,$fTerms,$fSettings){
+		//Check job status
+		if($j->job_status !== $fTerms['job_statuses']['taken_not_notified_customer']) return $jobsRelaySettings;
 
-			//set job status to taken-details sent to fixit
-			$j1 = new job();
-			$j1->set_job_status($j->job_nid,
-								$fTerms['job_statuses']['taken-details sent to fixit']);
-		break;
+		$jobsRelaySettings['job_status_taken_not_notified_customer']['value'] = 1;
 
-		
-		
-		
-		
-		//job status = taken-details sent to fixit
-		case $fTerms['job_statuses']['taken-details sent to fixit']:
+	return $jobsRelaySettings;		
+	}
+
+	private function react_job_status_taken_not_notified_customer($j,$jobsRelaySettings,$fTerms,$fSettings){
+		//arguments for text out: 
+		//$job_ref,
+		//$customer_ref,
+		//$fixit_ref,
+		//$sms,
+		//$mms,
+		//$text_type_ref,
+		//$cell_formatted
+		$t1 = new text_out();
+		$t1->main	($j->job_nid,
+					$j->customer_nid,
+					$j->fixit_nid,
+					$fSettings['sms_job_taken_notify_customer']['value'] . ' ' . $j->fixit_cell,
+					$j->mms,
+					$fTerms['text_out_types']['notify_customer_job_is_taken'],
+					$j->customer_cell);
+
+		$j1 = new job();
+		$j1->set_job_status	($j->job_nid,
+							$fTerms['job_statuses']['taken_notified_customer']);
+
+	return $jobsRelaySettings;		
+	}
+
+	private function check_job_status_taken_notified_customer($j,$jobsRelaySettings,$fTerms,$fSettings){
+		//Check job status
+		if($j->job_status !== $fTerms['job_statuses']['taken_notified_customer']) return $jobsRelaySettings;
+
+		$jobsRelaySettings['job_status_taken_notified_customer']['value'] = 1;
+
+	return $jobsRelaySettings;
+	}
+	
+	private function react_job_status_taken_notified_customer($j,$jobsRelaySettings,$fTerms,$fSettings){
+		$t1 = new text_out();
+		$t1->main	($j->job_nid,
+					$j->customer_nid,
+					$j->fixit_nid,
+					$fSettings['sms_job_taken_details_to_fixit']['value'] . ' ' . $j->customer_cell,
+					$j->mms,
+					$fTerms['text_out_types']['send_details_to_fixit'],
+					$j->fixit_cell);
+
+		//set job status to taken_details_sent_to_fixit
+		$j1 = new job();
+		$j1->set_job_status	($j->job_nid,
+							$fTerms['job_statuses']['taken_details_sent_to_fixit']);
+	}
+	
+	private function check_job_status_taken_details_sent_to_fixit($j,$jobsRelaySettings,$fTerms,$fSettings){
+		//Check job status
+		if($j->job_status !== $fTerms['job_statuses']['taken_details_sent_to_fixit']) return $jobsRelaySettings;
+				
+		$jobsRelaySettings['job_status_taken_details_sent_to_fixit']['value'] = 1;
+
+	return $jobsRelaySettings;
+	}
+	
+	private function react_job_status_taken_details_sent_to_fixit($j,$jobsRelaySettings,$fTerms,$fSettings,$testMode){
+		if($testMode !== 1){
 			//make sure the last text related to this job was between 24-48 hours ago
 			$timeSinceLastText = time() - $j->last_text/(60*60);
-			if($timeSinceLastText < $fSettings['delay_request_feedback_min']) continue;
-			if($timeSinceLastText > $fSettings['delay_request_feedback_max']) continue;
+			if($timeSinceLastText < $fSettings['delay_request_feedback_min']) return $jobsRelaySettings;
+			if($timeSinceLastText > $fSettings['delay_request_feedback_max']) return $jobsRelaySettings;
+		}
 
-			$t1 = new text_out();
-			$t1->main($j->job_nid,
-						$j->customer_nid,
-						0,
-						$fSettings['sms_job_request_feedback']['value'],
-						$j->mms,
-						$fTerms['text_out_types']['request feedback'],
-						$j->customer_cell);
+		$t1 = new text_out();
+		$t1->main	($j->job_nid,
+					$j->customer_nid,
+					0,
+					$fSettings['sms_job_request_feedback']['value'],
+					$j->mms,
+					$fTerms['text_out_types']['request_feedback'],
+					$j->customer_cell);
 
-			//set job status to feedback requested
+			//set job status to feedback_requested
 			$j1 = new job();
-			$j1->set_job_status($j->job_nid,
-								$fTerms['job_statuses']['feedback requested']);
-		break;
-		
-		
-		
-		
-		
-		//job status = feedback requested
-		case $fTerms['job_statuses']['feedback requested']:
-			//do nothing
-		break;		
-	}		
-	
+			$j1->set_job_status	($j->job_nid,
+								$fTerms['job_statuses']['feedback_requested']);
 	}
+
+	private function check_job_status_feedback_requested($j,$jobsRelaySettings,$fTerms,$fSettings){
+		//Check job status
+		if($j->job_status !== $fTerms['job_statuses']['taken_details_sent_to_fixit']) return $jobsRelaySettings;
+		
+		$jobsRelaySettings['job_status_feedback_requested']['value'] = 1;
+	
+	return $jobsRelaySettings;
 	}
-	
-	
-	
-	
-	private function get_fixit($fTerms,$fSettings){
+
+	private function get_fixit($fTerms,$fSettings,$j,$testMode){
 		$sql = "select			n.nid as fixit_nid,
 								pt.field_person_type_tid as person_type,
 								cp.field_cell_phone_value as cell_formatted,
 								fr.entity_id as text_nid,
-								nt.created as text_time
+								nt.created as text_time,
+								fa.field_address_postal_code as zip								
 				from			node n
 				join			field_data_field_person_type pt on pt.entity_id = n.nid
 				join			field_data_field_cell_phone cp on cp.entity_id = n.nid
 				left join		field_data_field_fixit_ref fr on fr.field_fixit_ref_target_id = n.nid
 				left join		node nt on nt.nid = fr.entity_id
+				left join		field_data_field_address fa on fa.entity_id = n.nid
 				where			n.type = 'person'
 				and				pt.field_person_type_tid = :fixit_tid
 				and				cp.field_cell_phone_value is not null
@@ -293,26 +337,87 @@ class jobs_relay{
 		$person_type = $fTerms['person_types']['fixit'];
 		$args = array(':fixit_tid' => $person_type);
 		$results = db_query($sql,$args);
-
 		//copy all the fixits to an array and exclude duplicates and ones with a text message in last time interval
 		$fixits = array();		
 		$fixit_nid = 0;
+
 		foreach($results as $r){
-			
+			//Skip if no zip
+			if($r->zip == '') continue;
+			//If it has a text within the last 10m, don't include it in the array
+			if((time() - $r->text_time) < $fSettings['job_relay_time']['value']) continue;
+
+			//Skip if the fixit is a duplicate of the last one
 			if($fixit_nid == $r->fixit_nid) continue;
 			
-			$fixit_nid = $r->fixit_nid;
+			//Determine if the distance from customer to Fixit is too far
+			$zipAPI = 	'https://www.zipcodeapi.com/rest' . '/' .
+						$fSettings['zipcode_api_key']['value'] . 
+						'/distance.json' . '/' . 
+						$j->zip .  '/'. 
+						$r->zip . '/' . 'mile';
+			if($testMode == 1){
+				$distZip = 0.1;
+			}else{
+				$distZip = json_decode(file_get_contents($zipAPI), true)['distance'];
+			}
 
-			//if it has a text within the last 10m, don't include it in the array
-			if((time() - $r->text_time) < $fSettings['job_relay_time']['value']) continue;
-			
+			if($distZip == NULL || $distZip > $fSettings['max_distance_to_fixit']['value']) continue;
+			$fixit_nid = $r->fixit_nid;
 			$fixits[] = $r;
 		}
-
 		//pick on fixit at random
 		if(count($fixits) > 0) $fixit = $fixits[rand(0,count($fixits)-1)];
-		
+
 	return $fixit;
+	}
+	
+	private function check_for_duplicate_text($fixit,$j,$fTerms){
+	//if we have ever sent a text to this cell number about this job, 
+	//with this status, don't send another one
+
+		$sql = "select		*
+				from		field_data_field_cell_phone cp
+				join		field_data_field_text_type tt on tt.entity_id = cp.entity_id
+				join		field_data_field_job j on j.entity_id = cp.entity_id
+				where		cp.field_cell_phone_value = :cell
+				and			cp.bundle = 'text_out'
+				and			j.field_job_target_id = :job_nid
+				and			tt.field_text_type_tid = :text_type";
+				
+				
+		$args = array	(':cell' => preg_replace('/[^0-9]/','',$fixit->cell_formatted),
+						':job_nid' => $j->job_nid,
+						':text_type' => $fTerms['text_out_types']['relay_to_fixit']);
+		$result = db_query($sql,$args)->fetchAssoc();
+		
+		//If no texts were found, return 0
+		if($result == NULL) return 0;
+
+	return 1;
+	}
+	
+	private function check_for_quiet_hours($fSettings){
+	//If the time is during quiet hours, don't proceed with sending any messages
+
+		//Assume we are in quiet hours unless proven otherwise
+		$quietHours = 1;
+		
+		date_default_timezone_set('America/Los_Angeles');
+		if((time() > strtotime($fSettings['relay_start_time']['value']) && time() < strtotime($fSettings['relay_stop_time']['value']))){
+			$quietHours = 0;
+		}
+	return $quietHours;
+	}
+	
+	private function validate_job_data($j){
+		//validate job data
+		if($j->job_nid == NULL) $j->job_nid = 0;
+		if($j->customer_nid == NULL) return 0;
+		if($j->fixit_nid == NULL) $j->fixit_nid = 0;
+		if($j->sms == NULL) return 0;
+		if($j->mms == NULL) $j->mms = ''; //@todo put real validation here later
+	return $j;
 	}
 
 
