@@ -82,6 +82,7 @@ class jobs_relay{
 
 			//This loop performs an action when the value is set to 1 for any of the array elements
 			foreach($jobsRelaySettings as $function => $setting){
+				
 				//If the setting is not set to active, skip it
 				if($setting['active'] !== 1) continue;
 	
@@ -100,16 +101,32 @@ class jobs_relay{
 
 	private function check_job_missing_zip($j,$jobsRelaySettings,$fTerms,$fSettings){
 		//Check if the customer has a zip code
-		if(preg_match('/[0-9]{5}/',$j->zip,$matches)){
-			$jobsRelaySettings['job_missing_zip']['value'] = 0;
-		}else{
-			$jobsRelaySettings['job_missing_zip']['value'] = 1;
-		}
-
+		if(preg_match('/[0-9]{5}/',$j->zip,$matches)) return $jobsRelaySettings;
+		
+		$jobsRelaySettings['job_missing_zip']['value'] = 1;
+		
 	return $jobsRelaySettings;
 	}
 
 	private function react_job_missing_zip($j,$jobsRelaySettings,$fTerms,$fSettings){
+
+		//check if we have already texted this customer today
+		$sql = "	select	cp.entity_id as text_out_nid
+					from	field_data_field_cell_phone cp
+					left join	node n on n.nid = cp.entity_id
+					where	field_cell_phone_value = :cell
+					and		n.created > :yesterday";
+
+		$args = array(	':cell' => preg_replace('/[^0-9]/','',$j->customer_cell),
+						':yesterday' => time() - 60*60*date('G'));
+		$results = db_query($sql,$args);
+		$textsOut = array();
+		foreach($results as $r){
+			$textsOut[] = $r;
+		}
+
+		if(count($textsOut) > 1) return;
+		
 			//arguments for text out: 
 			//$job_ref,
 			//$customer_ref,
@@ -362,9 +379,12 @@ class jobs_relay{
 				$distZip = json_decode(file_get_contents($zipAPI), true)['distance'];
 			}
 
-			if($distZip == NULL || $distZip > $fSettings['max_distance_to_fixit']['value']) continue;
+			//important to use === instead of == because the distance is zero when
+			//customer and fixit are in the same zip
+			if($distZip === NULL || $distZip > $fSettings['max_distance_to_fixit']['value']) continue;
 			$fixit_nid = $r->fixit_nid;
 			$fixits[] = $r;
+
 		}
 		//pick on fixit at random
 		if(count($fixits) > 0) $fixit = $fixits[rand(0,count($fixits)-1)];

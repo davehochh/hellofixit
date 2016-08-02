@@ -110,6 +110,26 @@ class text_in{
 
 	return $textInSettings;
 	}
+	
+	private function check_from_fixit($function,$textInSettings,$newText,$fTerms,$fSettings){
+		//query to find out if text is from an existing person
+		$sql = "	select 		cp.entity_id as person_nid
+					from 		field_data_field_cell_phone cp
+					join 		field_data_field_person_type pt on pt.entity_id = cp.entity_id
+					where 		cp.field_cell_phone_value = :cell_formatted
+					and			pt.field_person_type_tid = :person_type
+					order by	cp.entity_id desc";
+
+		$args = array(	':cell_formatted' => $newText['cell_formatted'],
+						':person_type' => $fTerms['person_types']['fixit']);
+		$result = db_query($sql,$args)->fetchAssoc();
+		
+		if(!isset($result) or $result == NULL) return $textInSettings;
+		$textInSettings['from_fixit']['value'] = 1;
+		$textInSettings['dbData']['fixit_nid'] = $result['person_nid'];
+
+	return $textInSettings;
+	}
 
 	private function check_feedback($function,$textInSettings,$newText,$fTerms,$fSettings){
 		//Query for text node where the recipient is a customer with matching cell number
@@ -161,7 +181,10 @@ class text_in{
 	private function check_add_to_job($function,$textInSettings,$newText,$fTerms,$fSettings){
 	//If a job was created for same person in the last minute we add this new 
 	//info to that job instead of making a new job
-		
+
+	//if somebody is telling us their zip code, don't add that to a job
+	if((preg_match('/[0-9]{5}/',$newText['sms'],$matches))) return $textInSettings;
+	
 		//query to see if job exists for this cell number within last minute
 		$sql = "select cr.entity_id as job_nid,
 				cr.field_customer_ref_target_id as customer_nid,
@@ -246,9 +269,13 @@ class text_in{
 		//if doesn't contain string contractor
 		if($textInSettings['contains_contractor']['value'] == 1) return $textInSettings;
 		
-		//if not update zip
-		if($textInSettings['update_zip']['value'] == 1) return $textInSettings;
+		//if not contains zip
+		if($textInSettings['contains_zip']['value'] == 1) return $textInSettings;
 		
+		//if not from fixit
+		if($textInSettings['from_fixit']['value'] == 1) return $textInSettings;
+
+		//then we can say it is a new job
 		$textInSettings['new_job']['value'] = 1;
 		
 	return $textInSettings;		

@@ -45,6 +45,7 @@
 		
 		$textInSettings['spam'] = array('level' => 1, 'active' => 1, 'value' => 0);
 		$textInSettings['take_job'] = array('level' => 1, 'active' => 1, 'value' => 0);		
+		$textInSettings['from_fixit'] = array('level' => 1, 'active' => 1, 'value' => 0);		
 		$textInSettings['feedback'] = array('level' => 1, 'active' => 1, 'value' => 0);
 		$textInSettings['existing_person'] = array('level' => 1, 'active' => 1, 'value' => 0);
 		$textInSettings['add_to_job'] = array('level' => 1, 'active' => 1, 'value' => 0);
