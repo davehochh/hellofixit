@@ -14,7 +14,8 @@ require_once('hellofixit_settings_forms.inc');
 
 
 	function hellofixit_dev(){
-		hellofixit_text_in('2543941393','I need my fence mended','fence pic url');
+		//hellofixit_text_in('5129871881','','hhjjkk');
+		$jobsRelaySettings = hellofixit_cron('turtle19342spoon',0);
 	}
 
 	/*
@@ -67,6 +68,8 @@ require_once('hellofixit_settings_forms.inc');
 		//jobs relay
 		$relay1 = new jobs_relay();
 		$relay1->main($fTerms,$fSettings,$jobsRelaySettings,$testMode);
+	
+	return $jobsRelaySettings;
 	}
 	
 	function hellofixit_tests(){

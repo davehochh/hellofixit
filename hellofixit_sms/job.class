@@ -43,7 +43,7 @@ class job{
 			
 		if($sms == NULL){
 			watchdog('hellofixit','new job sms null', WATCHDOG_NOTICE);
-			return $jobData;
+			//return $jobData;
 		}
 		
 		if($mms == NULL){
