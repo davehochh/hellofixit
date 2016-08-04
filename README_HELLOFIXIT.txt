@@ -271,6 +271,8 @@ FUTURE DEVELOPMENT ROADMAP
 - Possible bugs
 	Sends two sms to customer asking for zip code
 	Zip codes don't display in UI when populated programmatically
+	Jobs relay approved test won't work if there are any fixits in the database.
+	Probably a good idea to only run tests when there are no preexisting person, job, or text_out nodes
 	
 - Settings
 	Make a setting for the word that Fixits have to reply with to take a job

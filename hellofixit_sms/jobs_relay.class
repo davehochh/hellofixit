@@ -102,7 +102,7 @@ class jobs_relay{
 	private function check_job_missing_zip($j,$jobsRelaySettings,$fTerms,$fSettings){
 		//Check if the customer has a zip code
 		if(preg_match('/[0-9]{5}/',$j->zip,$matches)) return $jobsRelaySettings;
-		
+
 		$jobsRelaySettings['job_missing_zip']['value'] = 1;
 		
 	return $jobsRelaySettings;
@@ -148,12 +148,9 @@ class jobs_relay{
 	private function check_job_status_needs_approval($j,$jobsRelaySettings,$fTerms,$fSettings){
 		//Check job status
 		if($j->job_status !== $fTerms['job_statuses']['needs_approval']) return $jobsRelaySettings;
-		
-		//Check if the customer has a zip
-		if($jobsRelaySettings['job_missing_zip']['value'] !== 1) return $jobsRelaySettings;
 
-		//Check job status
-		if($j->job_status !== $fTerms['job_statuses']['needs_approval']) return $jobsRelaySettings;
+		//Check if the customer has a zip
+		if($jobsRelaySettings['job_missing_zip']['value'] == 1) return $jobsRelaySettings;
 
 		$jobsRelaySettings['job_status_needs_approval']['value'] = 1;
 
@@ -161,8 +158,7 @@ class jobs_relay{
 	}
 	
 	private function react_job_status_needs_approval($j,$jobsRelaySettings,$fTerms,$fSettings){
-		//if we have already sent a text to the admin for this job, don't send another one
-		if($j->last_text !== NULL) return $jobsRelaySettings;
+		if($this->check_for_duplicate_text($j->customer_cell,$j->job_nid,$fTerms['text_out_types']['request_approval']) == 1) return;
 
 		//arguments for text out: 
 		//$job_ref,
@@ -177,7 +173,7 @@ class jobs_relay{
 						$j->customer_nid,
 						0,
 						$fSettings['sms_job_needs_approval']['value'] . $fSettings['url']['value'] . '/jobadmin/new/' . $j->job_nid,
-						$j->mms,
+						'',
 						$fTerms['text_out_types']['request_approval'],
 						$fSettings['admin_cell_formatted']['value']
 					);
@@ -198,11 +194,8 @@ class jobs_relay{
 	
 	private function react_job_status_approved($j,$jobsRelaySettings,$fTerms,$fSettings,$testMode){
 		$fixit = $this->get_fixit($fTerms,$fSettings,$j,$testMode);
+		//@todo - need to track when there are no fixits for a job
 		if(!isset($fixit)) return;
-
-		//if we have ever sent a text to this cell number about this job, 
-		//with this status, don't send another one
-		if($this->check_for_duplicate_text($fixit,$j,$fTerms) == 1) return $jobsRelaySettings;
 
 		//arguments for text out: 
 		//$job_ref,
@@ -254,7 +247,7 @@ class jobs_relay{
 					$j->customer_nid,
 					$j->fixit_nid,
 					$fSettings['sms_job_taken_notify_customer']['value'] . ' ' . $j->fixit_cell,
-					$j->mms,
+					'',
 					$fTerms['text_out_types']['notify_customer_job_is_taken'],
 					$j->customer_cell);
 
@@ -355,17 +348,24 @@ class jobs_relay{
 		$args = array(':fixit_tid' => $person_type);
 		$results = db_query($sql,$args);
 		//copy all the fixits to an array and exclude duplicates and ones with a text message in last time interval
-		$fixits = array();		
-		$fixit_nid = 0;
+		$fixits = array();
+		$fixitNid = 0;
 
 		foreach($results as $r){
 			//Skip if no zip
 			if($r->zip == '') continue;
+
 			//If it has a text within the last 10m, don't include it in the array
 			if((time() - $r->text_time) < $fSettings['job_relay_time']['value']) continue;
 
 			//Skip if the fixit is a duplicate of the last one
-			if($fixit_nid == $r->fixit_nid) continue;
+			if($fixitNid == $r->fixit_nid) continue;
+			
+			//if we have ever sent a text to this cell number about this job, 
+			//with this status, don't send another one
+			if($this->check_for_duplicate_text($r->cell_formatted,
+												$j->job_nid,
+												$fTerms['text_out_types']['relay_to_fixit'])) continue;
 			
 			//Determine if the distance from customer to Fixit is too far
 			$zipAPI = 	'https://www.zipcodeapi.com/rest' . '/' .
@@ -392,10 +392,12 @@ class jobs_relay{
 	return $fixit;
 	}
 	
-	private function check_for_duplicate_text($fixit,$j,$fTerms){
-	//if we have ever sent a text to this cell number about this job, 
-	//with this status, don't send another one
+	private function check_for_duplicate_text($cellFormatted,$jobNid,$textType){
+//die($cellFormatted . 'hh1');
 
+	//if we have ever sent a text to this cell number about this job,
+	//with this status, don't send another one
+	
 		$sql = "select		*
 				from		field_data_field_cell_phone cp
 				join		field_data_field_text_type tt on tt.entity_id = cp.entity_id
@@ -405,10 +407,9 @@ class jobs_relay{
 				and			j.field_job_target_id = :job_nid
 				and			tt.field_text_type_tid = :text_type";
 				
-				
-		$args = array	(':cell' => preg_replace('/[^0-9]/','',$fixit->cell_formatted),
-						':job_nid' => $j->job_nid,
-						':text_type' => $fTerms['text_out_types']['relay_to_fixit']);
+		$args = array	(':cell' => preg_replace('/[^0-9]/','',$cellFormatted),
+						':job_nid' => $jobNid,
+						':text_type' => $textType);
 		$result = db_query($sql,$args)->fetchAssoc();
 		
 		//If no texts were found, return 0

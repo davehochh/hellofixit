@@ -14,8 +14,9 @@ require_once('hellofixit_settings_forms.inc');
 
 
 	function hellofixit_dev(){
+		//this serves no purpose in production
 		//hellofixit_text_in('5129871881','','hhjjkk');
-		$jobsRelaySettings = hellofixit_cron('turtle19342spoon',0);
+		//hellofixit_cron('turtle19342spoon',0);
 	}
 
 	/*
@@ -83,12 +84,12 @@ require_once('hellofixit_settings_forms.inc');
 	 * Implements hook_menu()
 	 */	 
 	function hellofixit_sms_menu(){
-		$items['admin/hellofixit/dev'] = array(
-			'title' => 'Hellofixit dev',
-			'page callback' => 'hellofixit_dev',
-			'access arguments' => array('administer users'),
-			'type' => MENU_NORMAL_ITEM,
- 		);
+		//$items['admin/hellofixit/dev'] = array(
+		//	'title' => 'Hellofixit dev',
+		//	'page callback' => 'hellofixit_dev',
+		//	'access arguments' => array('administer users'),
+		//	'type' => MENU_NORMAL_ITEM,
+ 		//);
 
 		$items['admin/hellofixit/settings'] = array(
 			'title' => 'Hellofixit settings',
